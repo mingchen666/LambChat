@@ -22,6 +22,14 @@ RECOVERY_LOCK_PREFIX = "task:recovery:"
 RECOVERY_LOCK_TTL_SECONDS = 300
 
 
+def _get_enabled_skills_from_metadata(session_metadata: dict[str, Any]) -> list[str] | None:
+    """Preserve [] as an explicit empty whitelist while treating missing/None as global."""
+    if "enabled_skills" not in session_metadata:
+        return None
+    enabled_skills = session_metadata.get("enabled_skills")
+    return enabled_skills if isinstance(enabled_skills, list) else None
+
+
 class TaskRecoveryService:
     """Coordinates task recovery and session resume flows."""
 
@@ -165,6 +173,7 @@ class TaskRecoveryService:
         recovery_trace_id = recovery_trace.trace_id
         user_roles = await self.get_user_roles(session.user_id)
         limiter = get_concurrency_limiter()
+        enabled_skills = _get_enabled_skills_from_metadata(session_metadata)
         task_context = {
             "executor_key": executor_key,
             "agent_id": agent_id,
@@ -175,6 +184,12 @@ class TaskRecoveryService:
             "trace_id": recovery_trace_id,
             "user_message_written": True,
             "disabled_skills": session_metadata.get("disabled_skills") or None,
+            "enabled_skills": enabled_skills,
+            "persona_system_prompt": (
+                (session_metadata.get("persona_snapshot") or {}).get("system_prompt")
+                if isinstance(session_metadata.get("persona_snapshot"), dict)
+                else None
+            ),
             "disabled_mcp_tools": session_metadata.get("disabled_mcp_tools") or None,
         }
 
@@ -209,6 +224,12 @@ class TaskRecoveryService:
                     run_id=new_run_id,
                     project_id=session_metadata.get("project_id"),
                     disabled_skills=session_metadata.get("disabled_skills") or None,
+                    enabled_skills=enabled_skills,
+                    persona_system_prompt=(
+                        (session_metadata.get("persona_snapshot") or {}).get("system_prompt")
+                        if isinstance(session_metadata.get("persona_snapshot"), dict)
+                        else None
+                    ),
                     disabled_mcp_tools=session_metadata.get("disabled_mcp_tools") or None,
                     session_name=getattr(session, "name", None),
                 )
@@ -260,6 +281,10 @@ class TaskRecoveryService:
                     "agent_options": session_metadata.get("agent_options") or {},
                     "disabled_tools": session_metadata.get("disabled_tools") or [],
                     "disabled_skills": session_metadata.get("disabled_skills") or [],
+                    "enabled_skills": enabled_skills,
+                    "persona_preset_id": session_metadata.get("persona_preset_id"),
+                    "persona_preset_name": session_metadata.get("persona_preset_name"),
+                    "persona_snapshot": session_metadata.get("persona_snapshot"),
                     "disabled_mcp_tools": session_metadata.get("disabled_mcp_tools") or [],
                     "language": language,
                     "project_id": session_metadata.get("project_id"),

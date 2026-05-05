@@ -6,13 +6,17 @@ import { Permission } from "../../../types";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
 import { useSkillsActions } from "./useSkillsActions";
 import { SkillsList } from "./SkillsList";
-import { SkillFormModal } from "./SkillFormModal";
+import { SkillFormSidebar } from "./SkillFormSidebar";
 import { ZipUploadModal } from "./ZipUploadModal";
 import { GithubImportModal } from "./GithubImportModal";
 import { BatchActionBar } from "./BatchActionBar";
 import { PublishDialog } from "./PublishDialog";
 
-export function SkillsPanel() {
+interface SkillsPanelProps {
+  embedded?: boolean;
+}
+
+export function SkillsPanel({ embedded = false }: SkillsPanelProps) {
   const { t } = useTranslation();
   const { enableSkills } = useSettingsContext();
   const { hasAnyPermission } = useAuth();
@@ -46,6 +50,7 @@ export function SkillsPanel() {
   return (
     <div className="skill-theme-shell flex h-full min-h-0 flex-col">
       <SkillsList
+        embedded={embedded}
         searchQuery={actions.searchQuery}
         setSearchQuery={actions.setSearchQuery}
         selectedTags={actions.selectedTags}
@@ -91,15 +96,13 @@ export function SkillsPanel() {
         onZipClick={actions.handleZipClick}
       />
 
-      <SkillFormModal
+      <SkillFormSidebar
         showModal={actions.showModal}
         isCreating={actions.isCreating}
-        isFormFullscreen={actions.isFormFullscreen}
         editingSkill={actions.editingSkill}
         isLoading={actions.isLoading}
         onSave={actions.handleSave}
         onCancel={actions.handleCancel}
-        onFullscreenChange={actions.setIsFormFullscreen}
       />
 
       <ZipUploadModal

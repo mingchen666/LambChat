@@ -11,7 +11,9 @@ import "./styles/auth.css";
 import "./styles/chat.css";
 import "./styles/skill.css";
 import "./styles/glass.css";
+import "./styles/card-base.css";
 import "./styles/marketplace.css";
+import "./styles/persona.css";
 import "./styles/welcome.css";
 import "./styles/approval.css";
 import "./styles/landing.css";
@@ -21,6 +23,7 @@ import "./styles/utilities.css";
 import { AuthProvider } from "./hooks/useAuth";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { isMobileDevice, resetMobileViewport } from "./utils/mobile";
+import { registerLambChatPwa } from "./pwa";
 
 // Fix mobile viewport zoom issue after notification interaction
 // This prevents the page from staying zoomed in after clicking browser notifications
@@ -37,6 +40,8 @@ if (typeof window !== "undefined" && isMobileDevice()) {
     window.scrollTo(0, 0);
   });
 }
+
+registerLambChatPwa();
 
 // 开发时临时禁用 StrictMode 避免 SSE 双重连接问题
 // 生产环境可以重新启用

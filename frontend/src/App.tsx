@@ -183,6 +183,13 @@ function FilesPage() {
   return <AppContent key="files" activeTab="files" />;
 }
 
+function PersonaPage() {
+  usePageTitle("personaPresets.title", undefined, {
+    description: "personaPresets.subtitle",
+  });
+  return <AppContent key="persona" activeTab="persona" />;
+}
+
 function NotificationsPage() {
   usePageTitle("nav.notifications", undefined, {
     description: "nav.notifications",
@@ -270,7 +277,10 @@ function App() {
               path="/skills"
               element={
                 <ProtectedRoute
-                  permissions={[Permission.SKILL_READ]}
+                  permissions={[
+                    Permission.SKILL_READ,
+                    Permission.MARKETPLACE_READ,
+                  ]}
                   redirectTo="/chat"
                   showToast
                   toastMessage={t("errors.noPermission")}
@@ -283,7 +293,10 @@ function App() {
               path="/marketplace"
               element={
                 <ProtectedRoute
-                  permissions={[Permission.MARKETPLACE_READ]}
+                  permissions={[
+                    Permission.SKILL_READ,
+                    Permission.MARKETPLACE_READ,
+                  ]}
                   redirectTo="/chat"
                   showToast
                   toastMessage={t("errors.noPermission")}
@@ -383,6 +396,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <ModelsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/persona"
+              element={
+                <ProtectedRoute>
+                  <PersonaPage />
                 </ProtectedRoute>
               }
             />

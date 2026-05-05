@@ -1,17 +1,27 @@
-import { useState, useRef, useEffect, useCallback, memo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import toast from "react-hot-toast";
-import { ArrowUp, Square, Ban, Lock, FileText } from "lucide-react";
+import {
+  ArrowUp,
+  Square,
+  Ban,
+  Lock,
+  FileText,
+  X,
+  ChevronDown,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { ToolSelector } from "../selectors/ToolSelector";
 import { SkillSelector } from "../selectors/SkillSelector";
 import { AgentModeSelector } from "../selectors/AgentModeSelector";
-import { FileUploadButton } from "./FileUploadButton";
 import { uploadApi, getFullUrl } from "../../services/api";
 import { AttachmentCard } from "../common/AttachmentCard";
 import { ImageViewer } from "../common";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { ContactAdminDialog } from "../common/ContactAdminDialog";
 import { useFileUpload } from "../../hooks/useFileUpload";
+import { useMentionState } from "../../hooks/useMentionState";
+import { useMentionSearch } from "../../hooks/useMentionSearch";
 import { openAttachmentPreview } from "./attachmentPreviewStore";
 import {
   getTextareaMaxHeightPx,
@@ -21,6 +31,12 @@ import { AgentOptionButton } from "./AgentOptionButton";
 import { turndown, cleanPastedHtml } from "./chatInputTurndown";
 import { PASTE_TEXT_THRESHOLD } from "./chatInputConstants";
 import { FeatureMenu, type FeaturePanel } from "../selectors/FeatureMenu";
+import { PersonaPresetSelector } from "../persona/PersonaPresetSelector";
+import { MentionPopup } from "./MentionPopup";
+import {
+  PersonaAvatarIcon,
+  PersonaAvatarImage,
+} from "../persona/PersonaAvatarIcon";
 import type {
   ToolState,
   ToolCategory,
@@ -28,7 +44,26 @@ import type {
   SkillSource,
   AgentOption,
   MessageAttachment,
+  PersonaPreset,
+  PersonaPresetSnapshot,
+  FileCategory,
 } from "../../types";
+import { Permission } from "../../types";
+import { useAuth } from "../../hooks/useAuth";
+
+const FILE_CATEGORY_PERMISSIONS: Record<FileCategory, Permission> = {
+  image: Permission.FILE_UPLOAD_IMAGE,
+  video: Permission.FILE_UPLOAD_VIDEO,
+  audio: Permission.FILE_UPLOAD_AUDIO,
+  document: Permission.FILE_UPLOAD_DOCUMENT,
+};
+
+const FILE_CATEGORY_ACCEPT: Record<FileCategory, string> = {
+  image: "image/*",
+  video: "video/*",
+  audio: "audio/*",
+  document: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv",
+};
 
 export interface ChatInputProps {
   onSend: (
@@ -61,6 +96,29 @@ export interface ChatInputProps {
   enabledSkillsCount?: number;
   totalSkillsCount?: number;
   enableSkills?: boolean;
+  // Persona presets
+  personaPresets?: PersonaPreset[];
+  selectedPersonaPresetId?: string | null;
+  selectedPersonaName?: string | null;
+  personaSkillsControlled?: boolean;
+  personaPresetsLoading?: boolean;
+  personaPresetsMutating?: boolean;
+  onUsePersonaPreset?: (
+    preset: PersonaPreset,
+  ) => Promise<PersonaPresetSnapshot | null>;
+  onCopyPersonaPreset?: (preset: PersonaPreset) => Promise<void>;
+  onSavePersonaPreset?: (
+    preset: PersonaPreset | null,
+    data: {
+      name: string;
+      description: string;
+      system_prompt: string;
+      tags: string[];
+      skill_names: string[];
+    },
+  ) => Promise<void>;
+  onClearPersonaPreset?: () => void;
+  canManagePersonaPresets?: boolean;
   // Agent options
   agentOptions?: Record<string, AgentOption>;
   agentOptionValues?: Record<string, boolean | string | number>;
@@ -103,6 +161,16 @@ export const ChatInput = memo(function ChatInput({
   enabledSkillsCount = 0,
   totalSkillsCount = 0,
   enableSkills = true,
+  personaPresets = [],
+  selectedPersonaPresetId,
+  selectedPersonaName,
+  personaSkillsControlled = false,
+  personaPresetsLoading = false,
+  personaPresetsMutating = false,
+  onUsePersonaPreset,
+  onCopyPersonaPreset,
+  onClearPersonaPreset,
+  canManagePersonaPresets = false,
   // Agent options
   agentOptions,
   agentOptionValues = {},
@@ -116,6 +184,7 @@ export const ChatInput = memo(function ChatInput({
   className,
 }: ChatInputProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [input, setInput] = useState("");
   const [activePanel, setActivePanel] = useState<FeaturePanel>(null);
   const [internalAttachments, setInternalAttachments] = useState<
@@ -126,7 +195,15 @@ export const ChatInput = memo(function ChatInput({
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
   const [contactAdminOpen, setContactAdminOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFileCategory, setSelectedFileCategory] =
+    useState<FileCategory | null>(null);
   const resizeRafRef = useRef<number>(0);
+  const { hasPermission } = useAuth();
+
+  const uploadCategories = (
+    Object.keys(FILE_CATEGORY_PERMISSIONS) as FileCategory[]
+  ).filter((cat) => hasPermission(FILE_CATEGORY_PERMISSIONS[cat]));
   const [history, setHistory] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem("chatInputHistory");
@@ -137,14 +214,58 @@ export const ChatInput = memo(function ChatInput({
   });
   const historyIndexRef = useRef(-1);
   const draftRef = useRef("");
+  const [cursorPosition, setCursorPosition] = useState(0);
+
+  const mentionPresets = onUsePersonaPreset ? personaPresets : [];
+  const {
+    mention,
+    moveHighlight: moveMentionHighlight,
+    setHighlightedIndex: setMentionHighlight,
+    setResultCount: setMentionResultCount,
+    resetMention,
+  } = useMentionState(input, cursorPosition, mentionPresets);
+
+  const mentionSearch = useMentionSearch(mention.query, mention.isActive);
+
+  useEffect(() => {
+    if (mention.isActive) {
+      setMentionResultCount(mentionSearch.presets.length);
+    }
+  }, [mention.isActive, mentionSearch.presets.length, setMentionResultCount]);
+
+  const personaAvatar = useMemo(() => {
+    if (!selectedPersonaPresetId) return null;
+    const preset = personaPresets.find((p) => p.id === selectedPersonaPresetId);
+    if (!preset) return null;
+    return { avatar: preset.avatar, primaryTag: preset.tags[0] || "" };
+  }, [selectedPersonaPresetId, personaPresets]);
 
   const attachments = externalAttachments ?? internalAttachments;
   const setAttachments = externalOnAttachmentsChange ?? setInternalAttachments;
 
-  const { uploadFiles, validateCount, cancelUpload } = useFileUpload({
-    attachments,
-    onAttachmentsChange: setAttachments,
-  });
+  const { uploadFiles, uploadLimits, validateCount, cancelUpload } =
+    useFileUpload({
+      attachments,
+      onAttachmentsChange: setAttachments,
+    });
+
+  const handleFileCategorySelect = useCallback((category: FileCategory) => {
+    setSelectedFileCategory(category);
+    if (fileInputRef.current) {
+      fileInputRef.current.accept = FILE_CATEGORY_ACCEPT[category];
+      fileInputRef.current.click();
+    }
+  }, []);
+
+  const handleFileInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      uploadFiles(files, selectedFileCategory || undefined);
+      e.target.value = "";
+    },
+    [uploadFiles, selectedFileCategory],
+  );
 
   const resizeTextareaHeightNow = useCallback(() => {
     const el = textareaRef.current;
@@ -235,6 +356,28 @@ export const ChatInput = memo(function ChatInput({
     [validateCount, uploadFiles, t],
   );
 
+  const applyMentionSelection = useCallback(
+    (preset: PersonaPreset) => {
+      if (!mention.isActive) return;
+      const before = input.substring(0, mention.atIndex);
+      const after = input.substring(mention.atIndex + mention.query.length + 1);
+      const newInput = before + after;
+      setInput(newInput);
+      setCursorPosition(before.length || 0);
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (textarea) {
+          textarea.selectionStart = textarea.selectionEnd = before.length;
+          textarea.focus();
+          scheduleTextareaResize();
+        }
+      });
+      onUsePersonaPreset?.(preset);
+      resetMention();
+    },
+    [input, mention, onUsePersonaPreset, resetMention, scheduleTextareaResize],
+  );
+
   const handlePaste = (e: React.ClipboardEvent) => {
     const clipboardData = e.clipboardData;
     if (!clipboardData) return;
@@ -317,6 +460,30 @@ export const ChatInput = memo(function ChatInput({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (mention.isActive) {
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        moveMentionHighlight("up");
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        moveMentionHighlight("down");
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const highlighted = mentionSearch.presets[mention.highlightedIndex];
+        if (highlighted) applyMentionSelection(highlighted);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        resetMention();
+        return;
+      }
+    }
+
     const newlineModifier = localStorage.getItem("newlineModifier") || "shift";
 
     if (e.key === "Enter") {
@@ -419,7 +586,9 @@ export const ChatInput = memo(function ChatInput({
     >
       <form
         onSubmit={handleSubmit}
-        className={className ?? "mx-auto max-w-3xl xl:max-w-5xl px-2"}
+        className={
+          className ?? "mx-auto max-w-3xl lg:max-w-4xl xl:max-w-5xl px-2"
+        }
       >
         <div
           onDragOver={handleDragOver}
@@ -438,6 +607,20 @@ export const ChatInput = memo(function ChatInput({
               : "0 2px 12px rgba(0,0,0,0.06)",
           }}
         >
+          {mention.isActive && (
+            <MentionPopup
+              presets={mentionSearch.presets}
+              highlightedIndex={mention.highlightedIndex}
+              selectedPresetId={selectedPersonaPresetId}
+              isLoading={mentionSearch.isLoading}
+              isLoadingMore={mentionSearch.isLoadingMore}
+              hasMore={mentionSearch.hasMore}
+              onSelect={applyMentionSelection}
+              onHover={setMentionHighlight}
+              onClose={resetMention}
+              onLoadMore={mentionSearch.loadMore}
+            />
+          )}
           {attachments.length > 0 && (
             <div className="mx-3 mt-2.5 -mb-1 flex gap-3 overflow-x-auto attachment-scroll pb-1">
               {attachments.map((attachment) => {
@@ -479,29 +662,40 @@ export const ChatInput = memo(function ChatInput({
             </div>
           )}
 
-          <div className="px-2.5 pt-1 flex items-start gap-2">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onFocus={scheduleTextareaResize}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              placeholder={
-                canSend ? t("chat.placeholder") : t("chat.noPermission")
-              }
-              disabled={disabled || !canSend}
-              className="bg-transparent outline-none flex-1 pt-2.5 px-1 resize-none text-[15px] disabled:opacity-50 leading-relaxed overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] min-h-[52px]"
-              style={{ color: "var(--theme-text)" }}
-              rows={1}
-            />
+          <div className="px-2.5 pt-1">
+            <div className="relative">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  setCursorPosition(e.target.selectionStart);
+                }}
+                onFocus={scheduleTextareaResize}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                placeholder={
+                  canSend ? t("chat.placeholder") : t("chat.noPermission")
+                }
+                disabled={disabled || !canSend}
+                className="bg-transparent outline-none w-full pt-[10px] resize-none text-[15px] disabled:opacity-50 leading-relaxed overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] min-h-[40px] sm:min-h-[44px]"
+                style={{
+                  color: "var(--theme-text)",
+                  paddingLeft: 4,
+                }}
+                rows={1}
+              />
+            </div>
           </div>
 
-          <div className="flex justify-between pt-3 pb-3 px-2 mx-0.5 max-w-full">
-            <div className="flex items-center gap-2 self-end flex-1 min-w-0">
-              <FileUploadButton
-                attachments={attachments}
-                onAttachmentsChange={setAttachments}
+          <div className="flex justify-between flex-nowrap pt-3 pb-3 px-2 mx-0.5 max-w-full">
+            <div className="flex items-center gap-1 sm:gap-2 self-end flex-1 min-w-0 overflow-x-auto no-scrollbar">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileInputChange}
               />
               <FeatureMenu
                 activePanel={activePanel}
@@ -510,7 +704,10 @@ export const ChatInput = memo(function ChatInput({
                 totalToolsCount={totalToolsCount}
                 enabledSkillsCount={enabledSkillsCount}
                 totalSkillsCount={totalSkillsCount}
+                hasPersonaSelector={!!onUsePersonaPreset}
+                personaName={selectedPersonaName}
                 hasAgentSelector={agents.length > 1 && !!onSelectAgent}
+                agentName={agents.find((a) => a.id === currentAgent)?.name}
                 hasThinkingOption={
                   !!(
                     agentOptions &&
@@ -518,6 +715,9 @@ export const ChatInput = memo(function ChatInput({
                     Object.keys(agentOptions).length > 0
                   )
                 }
+                uploadCategories={uploadCategories}
+                uploadLimits={uploadLimits}
+                onFileCategorySelect={handleFileCategorySelect}
                 thinkingLabel={
                   agentOptions
                     ? Object.entries(agentOptions)
@@ -558,6 +758,51 @@ export const ChatInput = memo(function ChatInput({
                     : undefined
                 }
               />
+              {selectedPersonaName && (
+                <button
+                  type="button"
+                  className="chat-tool-btn group shrink min-w-0"
+                  onClick={() => setActivePanel("persona")}
+                  title={selectedPersonaName}
+                >
+                  <div className="flex flex-row items-center gap-1.5 min-w-0">
+                    <span className="relative w-[18px] h-[18px] shrink-0 inline-flex items-center justify-center">
+                      {personaAvatar?.avatar ? (
+                        <PersonaAvatarImage
+                          avatar={personaAvatar.avatar}
+                          alt=""
+                          className="w-[18px] h-[18px] rounded-full object-cover group-hover:opacity-0 transition-opacity"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display =
+                              "none";
+                          }}
+                        />
+                      ) : (
+                        <PersonaAvatarIcon
+                          avatar={personaAvatar?.avatar}
+                          primaryTag={personaAvatar?.primaryTag}
+                          size={18}
+                          className="transition-transform duration-200 group-hover:opacity-0"
+                        />
+                      )}
+                      {onClearPersonaPreset && (
+                        <X
+                          size={18}
+                          className="absolute inset-0 m-auto opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onClearPersonaPreset();
+                          }}
+                        />
+                      )}
+                    </span>
+                    <span className="max-w-40 truncate text-sm font-semibold text-blue-600 dark:text-blue-400">
+                      {selectedPersonaName}
+                    </span>
+                    <ChevronDown size={14} className="opacity-50 shrink-0" />
+                  </div>
+                </button>
+              )}
             </div>
 
             <div className="self-end flex space-x-1.5 flex-shrink-0">
@@ -652,10 +897,31 @@ export const ChatInput = memo(function ChatInput({
             isMutating={skillsMutating}
             enabledCount={enabledSkillsCount}
             totalCount={totalSkillsCount}
+            controlledByPersonaName={
+              personaSkillsControlled ? selectedPersonaName : null
+            }
             isOpen={activePanel === "skills"}
             onOpenChange={(open) => setActivePanel(open ? "skills" : null)}
           />
         )}
+      {onUsePersonaPreset && onCopyPersonaPreset && onClearPersonaPreset && (
+        <PersonaPresetSelector
+          presets={personaPresets}
+          selectedPresetId={selectedPersonaPresetId}
+          isOpen={activePanel === "persona"}
+          isLoading={personaPresetsLoading}
+          isMutating={personaPresetsMutating}
+          canManagePresets={canManagePersonaPresets}
+          onOpenChange={(open) => setActivePanel(open ? "persona" : null)}
+          onUsePreset={onUsePersonaPreset}
+          onCopyPreset={onCopyPersonaPreset}
+          onManagePresets={() => navigate("/persona")}
+          onClearPreset={() => {
+            onClearPersonaPreset();
+            setActivePanel(null);
+          }}
+        />
+      )}
       <AgentModeSelector
         agents={agents}
         currentAgent={currentAgent || ""}
@@ -680,7 +946,7 @@ export const ChatInput = memo(function ChatInput({
             />
           ))}
 
-      <div className="hidden sm:flex mx-auto max-w-3xl xl:max-w-5xl mt-3 px-2 justify-center">
+      <div className="hidden sm:flex mx-auto max-w-3xl lg:max-w-4xl xl:max-w-5xl mt-3 px-2 justify-center">
         <span
           className="text-xs font-serif"
           style={{ color: "var(--theme-text-secondary)" }}

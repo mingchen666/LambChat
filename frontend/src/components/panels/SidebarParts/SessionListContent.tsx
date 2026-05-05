@@ -6,6 +6,7 @@ import {
   FolderOpen,
   MessageSquarePlus,
   MoreHorizontal,
+  UserRound,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -167,7 +168,7 @@ export function SessionListContent({
       <div className="flex flex-col gap-px px-2 py-2 space-y-1">
         <button
           onClick={onNewSession}
-          className="w-full h-9 rounded-[10px] flex items-center gap-3 px-[9px] text-sm font-medium text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800/60 focus:outline-none transition-colors group"
+          className="sidebar-nav-btn w-full h-9 rounded-[10px] flex items-center gap-3 px-[9px] text-sm font-medium focus:outline-none transition-colors group"
         >
           <MessageSquarePlus size={20} />
           <span className="flex-1 text-left">{t("sidebar.newChat")}</span>
@@ -178,20 +179,31 @@ export function SessionListContent({
 
         <button
           onClick={onOpenSearch}
-          className="w-full h-9 rounded-[10px] flex items-center gap-3 px-[9px] text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800/60 focus:outline-none transition-colors group"
+          className="sidebar-nav-btn w-full h-9 rounded-[10px] flex items-center gap-3 px-[9px] text-sm focus:outline-none transition-colors group"
         >
           <Search size={20} />
           <span className="flex-1 text-left">
             {t("sidebar.searchSessions")}
           </span>
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-stone-400 dark:text-stone-500 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+          <kbd
+            className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ color: "var(--theme-text-tertiary)" }}
+          >
             ⌘K
           </kbd>
         </button>
 
         <button
+          onClick={() => navigate("/persona")}
+          className="sidebar-nav-btn w-full h-9 rounded-[10px] flex items-center gap-3 px-[9px] text-sm focus:outline-none transition-colors"
+        >
+          <UserRound size={20} />
+          <span>{t("personaPresets.title", "角色广场")}</span>
+        </button>
+
+        <button
           onClick={() => navigate("/files")}
-          className="w-full h-9 rounded-[10px] flex items-center gap-3 px-[9px] text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800/60 focus:outline-none transition-colors"
+          className="sidebar-nav-btn w-full h-9 rounded-[10px] flex items-center gap-3 px-[9px] text-sm focus:outline-none transition-colors"
         >
           <FolderOpen size={20} />
           <span>{t("fileLibrary.title")}</span>
@@ -202,7 +214,7 @@ export function SessionListContent({
             <button
               ref={expandedMoreMenuBtnRef}
               onClick={onToggleMoreMenu}
-              className="w-full h-9 rounded-[10px] flex items-center gap-3 px-[9px] text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800/60 focus:outline-none transition-colors"
+              className="sidebar-nav-btn w-full h-9 rounded-[10px] flex items-center gap-3 px-[9px] text-sm focus:outline-none transition-colors"
             >
               <MoreHorizontal size={20} />
               <span className="flex-1 text-left">{t("nav.more", "更多")}</span>
@@ -429,10 +441,10 @@ export function SessionListContent({
       </div>
 
       {/* Footer */}
-      <div className="shrink-0 p-2 border-t border-stone-200/60 dark:border-stone-800/60">
+      <div className="shrink-0 px-2 py-1 border-t border-stone-200/60 dark:border-stone-800/60">
         <div
           onClick={onShowProfile}
-          className="group flex items-center rounded-xl py-2 px-2 w-full hover:bg-stone-100 dark:hover:bg-stone-800/60 transition cursor-pointer"
+          className="group flex items-center rounded-xl py-3 px-2 w-full hover:bg-stone-100 dark:hover:bg-stone-800/60 transition cursor-pointer"
         >
           <div className="shrink-0 w-8 h-8 rounded-full overflow-hidden ring-1 ring-stone-200 dark:ring-stone-700 group-hover:ring-[var(--theme-primary)] transition mr-3">
             {user?.avatar_url && !imgError ? (
@@ -451,7 +463,7 @@ export function SessionListContent({
               </div>
             )}
           </div>
-          <div className="flex-1 text-left min-w-0 space-y-0.5">
+          <div className="flex-1 text-left min-w-0">
             <div className="text-sm font-medium text-stone-800 dark:text-stone-100 truncate">
               {user?.username || "User"}
             </div>

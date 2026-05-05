@@ -39,6 +39,7 @@ import {
   type SSEConnectionContext,
 } from "./useAgent/sseConnection";
 import { createOptimisticMessagesForSend } from "./useAgent/optimisticMessages";
+import { resolvePersonaEnabledSkills } from "./useAgent/personaRequestConfig";
 
 export function useAgent(options?: UseAgentOptions): UseAgentReturn {
   const { hasAnyPermission } = useAuth();
@@ -310,6 +311,17 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
               (sessionData.metadata?.disabled_tools as string[]) || undefined,
             disabled_skills:
               (sessionData.metadata?.disabled_skills as string[]) || undefined,
+            enabled_skills:
+              (sessionData.metadata?.enabled_skills as string[]) || undefined,
+            persona_preset_id:
+              (sessionData.metadata?.persona_preset_id as string) || undefined,
+            persona_preset_name:
+              (sessionData.metadata?.persona_preset_name as string) ||
+              undefined,
+            persona_snapshot:
+              (sessionData.metadata?.persona_snapshot as
+                | import("../types").PersonaPresetSnapshot
+                | undefined) || undefined,
             disabled_mcp_tools:
               (sessionData.metadata?.disabled_mcp_tools as string[]) ||
               undefined,
@@ -505,7 +517,12 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
         }
 
         // 获取当前禁用的 skills 和 mcp_tools
+        const personaPresetId = options?.getPersonaPresetId?.() || null;
         const disabledSkills = options?.getDisabledSkills?.() || [];
+        const enabledSkills = resolvePersonaEnabledSkills(
+          personaPresetId,
+          options?.getEnabledSkills?.(),
+        );
         const disabledMcpTools = options?.getDisabledMcpTools?.() || [];
 
         // Merge session-level agent options (e.g. model) with ChatInput values
@@ -523,6 +540,8 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
           pendingProjectIdRef.current ?? undefined,
           disabledSkills,
           disabledMcpTools,
+          personaPresetId,
+          enabledSkills,
         )) as {
           session_id: string;
           run_id: string;
@@ -556,6 +575,8 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
             agent_id: currentAgent,
             agent_options: fullAgentOptions,
             disabled_skills: disabledSkills,
+            enabled_skills: enabledSkills,
+            persona_preset_id: personaPresetId,
             disabled_mcp_tools: disabledMcpTools,
           };
           if (projectId) {
@@ -598,6 +619,8 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
             agent_id: currentAgent,
             agent_options: fullAgentOptions,
             disabled_skills: disabledSkills,
+            enabled_skills: enabledSkills,
+            persona_preset_id: personaPresetId,
             disabled_mcp_tools: disabledMcpTools,
           };
 

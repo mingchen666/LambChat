@@ -49,6 +49,8 @@ import type {
   AgentOption,
   MessageAttachment,
   ConnectionStatus,
+  PersonaPreset,
+  PersonaPresetSnapshot,
 } from "../../../types";
 import type { RevealPreviewRequest } from "../../chat/ChatMessage/items/revealPreviewData";
 import { clearFileRevealAutoOpenState } from "../../chat/ChatMessage/items/fileRevealAutoOpen";
@@ -101,6 +103,28 @@ interface ChatViewProps {
   enabledSkillsCount: number;
   totalSkillsCount: number;
   enableSkills: boolean;
+  personaPresets: PersonaPreset[];
+  selectedPersonaPresetId: string | null;
+  selectedPersonaName: string | null;
+  personaSkillsControlled: boolean;
+  personaPresetsLoading: boolean;
+  personaPresetsMutating: boolean;
+  onUsePersonaPreset: (
+    preset: PersonaPreset,
+  ) => Promise<PersonaPresetSnapshot | null>;
+  onCopyPersonaPreset: (preset: PersonaPreset) => Promise<void>;
+  onSavePersonaPreset: (
+    preset: PersonaPreset | null,
+    data: {
+      name: string;
+      description: string;
+      system_prompt: string;
+      tags: string[];
+      skill_names: string[];
+    },
+  ) => Promise<void>;
+  onClearPersonaPreset: () => void;
+  canManagePersonaPresets: boolean;
   agentOptions: Record<string, AgentOption>;
   agentOptionValues: Record<string, boolean | string | number>;
   onToggleAgentOption: (key: string, value: boolean | string | number) => void;
@@ -160,6 +184,17 @@ export function ChatView({
   enabledSkillsCount,
   totalSkillsCount,
   enableSkills,
+  personaPresets,
+  selectedPersonaPresetId,
+  selectedPersonaName,
+  personaSkillsControlled,
+  personaPresetsLoading,
+  personaPresetsMutating,
+  onUsePersonaPreset,
+  onCopyPersonaPreset,
+  onSavePersonaPreset,
+  onClearPersonaPreset,
+  canManagePersonaPresets,
   agentOptions,
   agentOptionValues,
   onToggleAgentOption,
@@ -262,6 +297,11 @@ export function ChatView({
     return latestMessage ? createMessageAnchorId(latestMessage.id) : null;
   }, [messages, visibleRange]);
 
+  const currentPersonaAvatar = useMemo(() => {
+    const preset = personaPresets.find((p) => p.id === selectedPersonaPresetId);
+    return preset?.avatar ?? null;
+  }, [personaPresets, selectedPersonaPresetId]);
+
   const handleOutlineNavigate = useCallback(
     (anchorId: string, messageIndex: number) => {
       virtuosoRef.current?.scrollToIndex({
@@ -300,10 +340,17 @@ export function ChatView({
           items={outlineItems}
           activeId={activeOutlineId}
           onNavigate={handleOutlineNavigate}
+          personaAvatar={currentPersonaAvatar}
         />
       ),
     });
-  }, [outlineItems, activeOutlineId, handleOutlineNavigate, t]);
+  }, [
+    outlineItems,
+    activeOutlineId,
+    handleOutlineNavigate,
+    t,
+    currentPersonaAvatar,
+  ]);
 
   useEffect(() => {
     if (outlineToggleRef) {
@@ -553,6 +600,8 @@ export function ChatView({
         sessionName={sessionName ?? undefined}
         runId={currentRunId ?? undefined}
         isLastMessage={index === messages.length - 1}
+        personaAvatar={currentPersonaAvatar}
+        personaName={selectedPersonaName}
         activePreview={activePreview}
         latestAutoPreview={latestAutoPreview}
         onOpenPreview={handleOpenPreview}
@@ -563,6 +612,8 @@ export function ChatView({
       sessionName,
       currentRunId,
       messages.length,
+      currentPersonaAvatar,
+      selectedPersonaName,
       activePreview,
       latestAutoPreview,
       handleOpenPreview,
@@ -632,6 +683,17 @@ export function ChatView({
     enabledSkillsCount,
     totalSkillsCount,
     enableSkills,
+    personaPresets,
+    selectedPersonaPresetId,
+    selectedPersonaName,
+    personaSkillsControlled,
+    personaPresetsLoading,
+    personaPresetsMutating,
+    onUsePersonaPreset,
+    onCopyPersonaPreset,
+    onSavePersonaPreset,
+    onClearPersonaPreset,
+    canManagePersonaPresets,
     agentOptions,
     agentOptionValues,
     onToggleAgentOption,

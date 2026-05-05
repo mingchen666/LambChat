@@ -6,6 +6,7 @@ import { getFullUrl } from "../../services/api";
 import type { RevealedFileItem } from "../../services/api";
 import { projectApi } from "../../services/api/project";
 import DocumentPreview from "../documents/DocumentPreview";
+import { ImageViewer } from "../common/ImageViewer";
 import { DelayedUnmount } from "../common/DelayedUnmount";
 import { Toolbar } from "./components/Toolbar";
 import { SessionGroup } from "./components/SessionGroup";
@@ -32,6 +33,7 @@ export function RevealedFilesPanel() {
     Array<{ id: string; name: string; type: string }>
   >([]);
   const [previewFile, setPreviewFile] = useState<RevealedFileItem | null>(null);
+  const [imageViewerSrc, setImageViewerSrc] = useState<string | null>(null);
 
   /* ── Data ── */
   useEffect(() => {
@@ -78,6 +80,10 @@ export function RevealedFilesPanel() {
         });
         return;
       }
+      if (file.file_type === "image" && file.url) {
+        setImageViewerSrc(getFullUrl(file.url) ?? file.url);
+        return;
+      }
       setPreviewFile(file);
     },
     [buildFileNavigationState, navigate],
@@ -90,10 +96,11 @@ export function RevealedFilesPanel() {
     [buildFileNavigationState, navigate],
   );
   const handlePreviewClose = useCallback(() => setPreviewFile(null), []);
+  const handleImageViewerClose = useCallback(() => setImageViewerSrc(null), []);
 
   return (
     <>
-      <div className="flex min-h-full flex-col">
+      <div className="flex min-h-full flex-col @container">
         {/* Toolbar */}
         <Toolbar
           search={search}
@@ -124,8 +131,8 @@ export function RevealedFilesPanel() {
           />
 
           {sessionGroups.length > 0 && (
-            <div className="flex flex-col pb-6 px-5 md:px-6 gap-3">
-              <div className="w-full flex flex-col gap-3 md:gap-6">
+            <div className="flex flex-col pb-6 px-5 @md:px-6 gap-3">
+              <div className="w-full flex flex-col gap-3 @md:gap-6">
                 {sessionGroups.map((group) => (
                   <SessionGroup
                     key={group.session_id}
@@ -169,16 +176,21 @@ export function RevealedFilesPanel() {
             signedUrl={
               previewFile.url ? getFullUrl(previewFile.url) : undefined
             }
-            imageUrl={
-              previewFile.file_type === "image" && previewFile.url
-                ? getFullUrl(previewFile.url)
-                : undefined
-            }
             fileSize={previewFile.file_size}
             onClose={handlePreviewClose}
           />
         )}
       </DelayedUnmount>
+
+      {/* Image fullscreen viewer */}
+      {imageViewerSrc && (
+        <ImageViewer
+          src={imageViewerSrc}
+          alt={previewFile?.file_name || ""}
+          isOpen={!!imageViewerSrc}
+          onClose={handleImageViewerClose}
+        />
+      )}
     </>
   );
 }

@@ -413,6 +413,29 @@
   color: #d6d3d1;
 }
 
+/* Pagination mobile overrides */
+@media (max-width: 640px) {
+  .pagination-btn {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .pagination-page {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 0.75rem;
+  }
+
+  .pagination-ellipsis {
+    width: 1.5rem;
+    height: 1.75rem;
+  }
+
+  .pagination-controls {
+    gap: 0.125rem;
+  }
+}
+
 /* Session menu — shared item styles (mobile bottom sheet & desktop dropdown) */
 .menu-item {
   display: flex;

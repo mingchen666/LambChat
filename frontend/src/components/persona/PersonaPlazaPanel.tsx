@@ -116,13 +116,13 @@ export function PersonaPlazaPanel() {
                   const CurrentIcon = SCOPE_ICON_MAP[current.icon] ?? Sparkles;
                   return (
                     <>
-                      <CurrentIcon size={13} />
+                      <CurrentIcon size={14} />
                       <span className="hidden sm:inline">{current.label}</span>
                     </>
                   );
                 })()}
                 <ChevronDown
-                  size={13}
+                  size={14}
                   className={`transition-transform ${
                     isScopeOpen ? "rotate-180" : ""
                   }`}
@@ -144,7 +144,7 @@ export function PersonaPlazaPanel() {
                       : ""
                   }`}
                 >
-                  <Tag size={13} />
+                  <Tag size={14} />
                   <span className="hidden sm:inline">
                     {t("personaPresets.tags", "标签")}
                   </span>
@@ -154,7 +154,7 @@ export function PersonaPlazaPanel() {
                     </span>
                   )}
                   <ChevronDown
-                    size={13}
+                    size={14}
                     className={`transition-transform ${
                       isFilterOpen ? "rotate-180" : ""
                     }`}

@@ -275,8 +275,8 @@ class E2BBackend(BaseSandbox):
         except Exception as e:
             logger.warning(f"E2B files.list({path}) failed: {e}, falling back to execute()")
             # 直接调用 BaseSandbox.ls 避免 super().ls_info -> self.ls -> self.ls_info 的无限递归
-            result = BaseSandbox.ls(self, path)
-            return result.entries or []
+            ls_result = BaseSandbox.ls(self, path)
+            return ls_result.entries or []
 
     async def als_info(self, path: str) -> list[FileInfo]:
         return await asyncio.to_thread(self.ls_info, path)

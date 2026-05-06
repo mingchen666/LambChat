@@ -37,7 +37,7 @@ export function useMentionState(
   presets: PersonaPreset[],
 ) {
   const [highlightedIndex, setHighlightedIndex] = useState(0);
-  const [dismissKey, setDismissKey] = useState(0);
+  const dismissCountRef = useRef(0);
   const dismissedAtRef = useRef<{ input: string; atIndex: number } | null>(
     null,
   );
@@ -90,7 +90,7 @@ export function useMentionState(
       dismissedAtRef.current = { input, atIndex: detected.atIndex };
     }
     setHighlightedIndex(0);
-    setDismissKey((v) => v + 1);
+    dismissCountRef.current += 1;
   }, [input, cursorPosition]);
 
   const setResultCount = useCallback((count: number) => {

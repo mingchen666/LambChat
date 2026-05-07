@@ -49,7 +49,7 @@ class SubagentEventMixin:
         inp: dict[str, Any] = data.get("input", {})
 
         subagent_type = inp.get("subagent_type", "unknown") if isinstance(inp, dict) else "unknown"
-        description = inp.get("description", "")[:500] if isinstance(inp, dict) else ""
+        description = inp.get("description", "") if isinstance(inp, dict) else ""
         run_id = event.get("run_id", uuid.uuid4().hex)
 
         metadata = event.get("metadata", {})

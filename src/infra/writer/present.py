@@ -495,7 +495,7 @@ class Presenter:
             {
                 "step": self._step_count,
                 "agent_name": agent_name,
-                "input": input_message[:500],
+                "input": input_message,
                 "timestamp": _get_timestamp(),
             },
             depth=depth,

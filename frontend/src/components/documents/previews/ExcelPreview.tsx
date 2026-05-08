@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LoadingSpinner } from "../../common/LoadingSpinner";
+import { worksheetToDisplayRows } from "./excelPreviewData";
 import "../../../styles/excel-preview.css";
 
 function useScrollIndicator(
@@ -43,7 +44,7 @@ interface ExcelPreviewProps {
 
 interface SheetData {
   name: string;
-  data: unknown[][];
+  data: string[][];
 }
 
 function colLabel(index: number): string {
@@ -84,23 +85,7 @@ const ExcelPreview = memo(function ExcelPreview({
         const workbook = XLSX.read(arrayBuffer, { type: "array" });
         const sheetData = workbook.SheetNames.map((name) => {
           const sheet = workbook.Sheets[name];
-          // Use sheet_to_json with header:1 to get raw 2D array
-          const raw = XLSX.utils.sheet_to_json(sheet, {
-            header: 1,
-            defval: "",
-            raw: true,
-          }) as unknown[][];
-
-          // Ensure every row has the same length (pad with "")
-          const maxLen = raw.reduce((m, r) => Math.max(m, r.length), 0);
-          const padded = raw.map((r) => {
-            if (r.length < maxLen) {
-              return [...r, ...Array(maxLen - r.length).fill("")];
-            }
-            return r;
-          });
-
-          return { name, data: padded };
+          return { name, data: worksheetToDisplayRows(sheet, XLSX.utils) };
         });
         setSheets(sheetData);
         setError(null);

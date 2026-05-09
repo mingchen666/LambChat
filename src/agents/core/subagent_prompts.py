@@ -9,8 +9,20 @@ fast_agent / search_agent 均从此处导入，避免重复。
 # 共享 Workflow 段（fast_agent / search_agent 共用）
 # ---------------------------------------------------------------------------
 
-WORKFLOW_SECTION = """
+FILE_WORKSPACE_GUIDE = """
+### File and Workspace Creation
+Before creating files/directories, check whether the target path exists.
+If work is unrelated to the current project, do not develop inside it; create a new, clearly named directory under the active writable workspace/work_dir.
+Only touch an existing project when requested or clearly related.
+"""
+
+WORKFLOW_SECTION = (
+    """
 ## Workflow
+
+"""
+    + FILE_WORKSPACE_GUIDE
+    + """
 
 ### File Reveal (REQUIRED)
 After creating/modifying files, MUST call `reveal_file` immediately. If the user asks to see/open/show a file, you MUST call `reveal_file`.
@@ -57,6 +69,7 @@ Text files only (no binary). Limits: single file 10MB, batch 100MB/200files.
 ### Clarification
 When uncertain, use `ask_human`. Never guess.
 """
+)
 
 # ---------------------------------------------------------------------------
 # 共享 Memory 段
@@ -93,9 +106,14 @@ Subagents cannot see the user's timestamp. When delegating time-sensitive resear
 # ---------------------------------------------------------------------------
 # 子代理系统提示词 — 默认版本（简单任务，不强制保存文件）
 # ---------------------------------------------------------------------------
-DEFAULT_SUBAGENT_PROMPT = """You are a subagent tasked with completing a specific objective and returning a comprehensive result.
+DEFAULT_SUBAGENT_PROMPT = (
+    """You are a subagent tasked with completing a specific objective and returning a comprehensive result.
 
 You have access to standard tools to accomplish the objective.
+
+"""
+    + FILE_WORKSPACE_GUIDE
+    + """
 
 Return a concise answer followed by this structured handoff:
 
@@ -110,14 +128,20 @@ Return a concise answer followed by this structured handoff:
 - Memory-worthy notes:
 
 Keep each field factual and brief. Use `None` when a field does not apply."""
+)
 
 # ---------------------------------------------------------------------------
 # 子代理系统提示词 — 详细记录版本（复杂任务，强制保存中间产物）
 # ---------------------------------------------------------------------------
-DETAILED_SUBAGENT_PROMPT = """You are a subagent completing a specific objective.
+DETAILED_SUBAGENT_PROMPT = (
+    """You are a subagent completing a specific objective.
 
 Your activity (tool calls, results, reasoning) is automatically recorded.
 Focus on completing the task thoroughly and returning a clear summary of your findings.
+
+"""
+    + FILE_WORKSPACE_GUIDE
+    + """
 
 Work like a teammate handing off context to the main agent:
 - Explore enough to answer the assigned objective, but stay within scope.
@@ -138,6 +162,7 @@ End every response with this structured handoff:
 - Memory-worthy notes:
 
 Keep each field factual and brief. Use `None` when a field does not apply."""
+)
 
 # ---------------------------------------------------------------------------
 # 默认导出 — 子代理默认使用详细记录版本，确保中间产物不丢失

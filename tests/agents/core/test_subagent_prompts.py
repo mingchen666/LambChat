@@ -56,3 +56,33 @@ def test_workflow_section_describes_skills_workspace_routing() -> None:
     workflow = WORKFLOW_SECTION.lower()
     for phrase in required_guidance:
         assert phrase in workflow
+
+
+def test_workflow_section_requires_path_checks_and_separate_workspaces() -> None:
+    required_guidance = [
+        "before creating files/directories",
+        "check whether the target path exists",
+        "do not develop inside it",
+        "active writable workspace/work_dir",
+        "unrelated to the current project",
+        "only touch an existing project",
+    ]
+
+    workflow = WORKFLOW_SECTION.lower()
+    for phrase in required_guidance:
+        assert phrase in workflow
+
+
+def test_subagent_prompt_requires_path_checks_and_separate_workspaces() -> None:
+    required_guidance = [
+        "before creating files/directories",
+        "check whether the target path exists",
+        "do not develop inside it",
+        "active writable workspace/work_dir",
+        "unrelated to the current project",
+        "only touch an existing project",
+    ]
+
+    prompt = SUBAGENT_PROMPT.lower()
+    for phrase in required_guidance:
+        assert phrase in prompt

@@ -532,6 +532,55 @@ test("extends the settle window when observed layout changes keep arriving durin
   assert.equal(scroller.scrollTop, 800);
 });
 
+test("keeps history bottom lock alive for late layout shifts after the first settle", async () => {
+  let resizeCallback: () => void = () => {
+    assert.fail("resize observer was not registered");
+  };
+  let completionReason: "settled" | "aborted" | "max-attempts" | null = null;
+  const scroller = {
+    scrollTop: 400,
+    clientHeight: 100,
+    scrollHeight: 500,
+  };
+  const virtuoso = {
+    scrollTo: () => {
+      scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight;
+    },
+  };
+
+  startVirtuosoScrollToBottom({
+    virtuoso,
+    scroller,
+    intervalMs: 5,
+    maxAttempts: 80,
+    maxDurationMs: 60,
+    settleWindowMs: 10,
+    observeLayoutChanges: true,
+    observeAfterSettleMs: 100,
+    onComplete: (reason) => {
+      completionReason = reason;
+    },
+    resizeObserverFactory: (callback) => {
+      resizeCallback = callback;
+      return {
+        observe: () => undefined,
+        disconnect: () => undefined,
+      };
+    },
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 45));
+  assert.equal(completionReason, null);
+
+  scroller.scrollHeight = 900;
+  resizeCallback();
+
+  assert.equal(scroller.scrollTop, 800);
+
+  await new Promise((resolve) => setTimeout(resolve, 130));
+  assert.equal(completionReason, "settled");
+});
+
 test("does not auto-scroll on viewport changes when the list is not scrollable", () => {
   assert.equal(
     shouldAutoScrollAfterViewportChange({

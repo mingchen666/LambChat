@@ -40,6 +40,7 @@ interface StartVirtuosoScrollToBottomOptions {
   observeLayoutChanges?: boolean;
   resizeObserverFactory?: (callback: () => void) => ResizeObserverLike;
   resizeObserverTarget?: unknown;
+  observeAfterSettleMs?: number;
   // Kept for compatibility with older callers. Settling must still require
   // the physical scroll bottom, otherwise the user can still drag lower.
   bottomOffsetPx?: number;
@@ -329,6 +330,7 @@ export function startVirtuosoScrollToBottom({
   observeLayoutChanges = false,
   resizeObserverFactory,
   resizeObserverTarget,
+  observeAfterSettleMs = 0,
   keepAliveWhile,
   shouldAbort,
   onAutoScroll,
@@ -348,6 +350,7 @@ export function startVirtuosoScrollToBottom({
   let finished = false;
   let resizeObserver: ResizeObserverLike | null = null;
   let keepAliveActive = false;
+  let postSettleObserveUntil = 0;
   const finish = (reason: "settled" | "aborted" | "max-attempts") => {
     if (finished) return;
     finished = true;
@@ -386,6 +389,10 @@ export function startVirtuosoScrollToBottom({
     startedAt = Date.now();
   };
   const noteLayoutChange = () => {
+    if (postSettleObserveUntil > 0) {
+      postSettleObserveUntil = Date.now() + observeAfterSettleMs;
+    }
+
     if (resetBudgetOnLayoutChange && !keepAliveActive) {
       resetSettleBudget();
       return;
@@ -465,6 +472,21 @@ export function startVirtuosoScrollToBottom({
 
     const isAtBottom =
       scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+
+    if (postSettleObserveUntil > 0) {
+      if (!isAtBottom) {
+        scroll();
+        return;
+      }
+
+      if (Date.now() < postSettleObserveUntil) {
+        return;
+      }
+
+      finish("settled");
+      return;
+    }
+
     const hasStableHeight =
       Date.now() - lastHeightChangeAt >= stableHeightWindowMs;
     const hasReachedAttemptLimit = attempts >= maxAttempts;
@@ -477,6 +499,17 @@ export function startVirtuosoScrollToBottom({
       hasReachedAttemptLimit ||
       hasExceededScrollBudget
     ) {
+      if (
+        isAtBottom &&
+        hasStableHeight &&
+        attempts >= minAttemptsBeforeSettling &&
+        observeLayoutChanges &&
+        observeAfterSettleMs > 0
+      ) {
+        postSettleObserveUntil = Date.now() + observeAfterSettleMs;
+        return;
+      }
+
       finish(
         hasExceededScrollBudget || hasReachedAttemptLimit
           ? "max-attempts"

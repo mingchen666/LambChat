@@ -255,6 +255,11 @@ export function useMessageScroll(
           : isHistoryFinalizeMode
             ? 180
             : 120,
+        observeAfterSettleMs: isHistoryFinalizeMode
+          ? isMobileViewport
+            ? 3600
+            : 2400
+          : 0,
         keepAliveWhile: () =>
           streamLockActiveRef.current && streamingAssistantActiveRef.current,
         shouldAbort: () => userScrolledUpRef.current,

@@ -14,6 +14,7 @@ import { MarkdownContent } from "./MarkdownContent";
 import { ToolCallItem } from "./ToolCallItem";
 import { UserMessageBubble } from "./UserMessageBubble";
 import { MessagePartRenderer } from "./MessagePartRenderer";
+import { RevealArtifactsSummary } from "./RevealArtifactsSummary";
 import { FeedbackButtons } from "./FeedbackButtons";
 import { AssistantAvatar } from "./AssistantAvatar";
 import { ShareButton } from "./ShareButton";
@@ -352,6 +353,11 @@ export const ChatMessage = memo(function ChatMessage({
                   })}
                 />
               ))}
+              <RevealArtifactsSummary
+                parts={message.parts}
+                isStreaming={message.isStreaming}
+                onOpenPreview={onOpenPreview}
+              />
             </div>
           ) : (
             <>

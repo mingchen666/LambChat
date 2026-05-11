@@ -6,6 +6,7 @@ import { isMobileDevice } from "../../../../utils/mobile";
 import { ToolResultPanel } from "./ToolResultPanel";
 import { closeCurrentToolPanel } from "./toolPanelRegistry";
 import { createSingletonStore } from "./createSingletonStore";
+import { setActiveRevealPreviewState } from "./activeRevealPreviewStore";
 import {
   registerPanelCapture,
   pushCurrentPanelToHistory,
@@ -36,7 +37,12 @@ registerPanelCapture(() => {
   const panel = panelStore.get();
   if (panel) {
     const captured = panel;
-    return { restore: () => openPersistentToolPanelDirect(captured) };
+    return {
+      restore: () => {
+        setActiveRevealPreviewState(null);
+        openPersistentToolPanelDirect(captured);
+      },
+    };
   }
   return null;
 });

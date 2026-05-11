@@ -14,14 +14,7 @@ FILE_WORKSPACE_GUIDE = """
 Before creating files/directories, check whether the target path exists. If work is unrelated to the current project, do not develop inside it; create a clearly named directory under the active writable workspace/work_dir. Only touch an existing project when requested or clearly related.
 """
 
-WORKFLOW_SECTION = (
-    """
-## Workflow
-
-"""
-    + FILE_WORKSPACE_GUIDE
-    + """
-
+FILE_REVEAL_GUIDE = """
 ### File Reveal (REQUIRED)
 After creating/modifying files, MUST call `reveal_file` immediately. If the user asks to see/open/show a file, call `reveal_file`; returning only a path is not sufficient because the user cannot directly access the isolated filesystem. Call `write_file` first, wait for completion, then call `reveal_file`.
 
@@ -29,8 +22,20 @@ After creating/modifying files, MUST call `reveal_file` immediately. If the user
 For Markdown/HTML/documents that reference local images, video, audio, or other files, call `reveal_file` for each resource first and use the returned `url`. Never put local sandbox paths such as `/home/user/chart.png` or `./images/photo.jpg` in user-facing documents.
 
 ### Project / Folder Reveal
-For multi-file frontend projects or ordinary folders with many files, use `reveal_project(project_path, name, template?)` so the user can preview/browse them directly. It returns `mode: "project"` for runnable frontend entries, otherwise `mode: "folder"`.
+For multi-file frontend projects or ordinary folders with many files, call `reveal_project(project_path, name, template?)` so the user can preview/browse them directly. It returns `mode: "project"` for runnable frontend entries, otherwise `mode: "folder"`.
 
+### Artifact Completion Gate (REQUIRED)
+If a task creates, edits, or delivers any file/folder artifact, reveal the actual artifact before the final answer. Use `reveal_file` for one or a few specific files, and `reveal_project` for multi-file projects, generated folders, or too many files to expose one by one. Do not claim the file or project is done until the appropriate reveal tool call has succeeded. If reveal fails, say that it failed and do not present the artifact as delivered.
+"""
+
+WORKFLOW_SECTION = (
+    """
+## Workflow
+
+"""
+    + FILE_WORKSPACE_GUIDE
+    + FILE_REVEAL_GUIDE
+    + """
 ### File Transfer
 Backends are routed by path prefix:
 - `/skills/*` → skill store (MongoDB)
@@ -84,6 +89,7 @@ DEFAULT_SUBAGENT_PROMPT = (
 
 """
     + FILE_WORKSPACE_GUIDE
+    + FILE_REVEAL_GUIDE
     + """
 
 Return a concise answer followed by this structured handoff:
@@ -111,6 +117,7 @@ Your activity (tool calls, results, reasoning) is automatically recorded. Comple
 
 """
     + FILE_WORKSPACE_GUIDE
+    + FILE_REVEAL_GUIDE
     + """
 
 Work like a teammate handing off context to the main agent:

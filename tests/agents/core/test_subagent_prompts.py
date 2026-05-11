@@ -1,4 +1,10 @@
-from src.agents.core.subagent_prompts import SUBAGENT_PROMPT, SUBAGENT_TASK_GUIDE, WORKFLOW_SECTION
+from src.agents.core.subagent_prompts import (
+    DEFAULT_SUBAGENT_PROMPT,
+    DETAILED_SUBAGENT_PROMPT,
+    SUBAGENT_PROMPT,
+    SUBAGENT_TASK_GUIDE,
+    WORKFLOW_SECTION,
+)
 from src.agents.fast_agent.prompt import FAST_SYSTEM_PROMPT
 from src.agents.search_agent.prompt import DEFAULT_SYSTEM_PROMPT, SANDBOX_SYSTEM_PROMPT
 
@@ -88,6 +94,38 @@ def test_subagent_prompt_requires_path_checks_and_separate_workspaces() -> None:
     prompt = SUBAGENT_PROMPT.lower()
     for phrase in required_guidance:
         assert phrase in prompt
+
+
+def test_subagent_prompts_require_file_reveal_before_claiming_completion() -> None:
+    required_guidance = [
+        "file reveal (required)",
+        "must call `reveal_file` immediately",
+        "call `reveal_project(project_path, name, template?)`",
+        "returning only a path is not sufficient",
+        "do not claim the file or project is done",
+        "reveal the actual artifact",
+    ]
+
+    for prompt in (DEFAULT_SUBAGENT_PROMPT, DETAILED_SUBAGENT_PROMPT, SUBAGENT_PROMPT):
+        lower_prompt = prompt.lower()
+        for phrase in required_guidance:
+            assert phrase in lower_prompt
+
+
+def test_main_agent_prompts_require_file_reveal_before_claiming_completion() -> None:
+    required_guidance = [
+        "file reveal (required)",
+        "must call `reveal_file` immediately",
+        "call `reveal_project(project_path, name, template?)`",
+        "returning only a path is not sufficient",
+        "do not claim the file or project is done",
+        "reveal the actual artifact",
+    ]
+
+    for prompt in (FAST_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT, SANDBOX_SYSTEM_PROMPT):
+        lower_prompt = prompt.lower()
+        for phrase in required_guidance:
+            assert phrase in lower_prompt
 
 
 def test_fast_system_prompt_does_not_repeat_file_transfer_rules() -> None:

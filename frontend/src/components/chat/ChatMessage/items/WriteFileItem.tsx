@@ -82,8 +82,9 @@ const WriteFileItem = memo(function WriteFileItem({
       <CollapsiblePill
         status={status}
         icon={<FilePlus size={12} className="shrink-0 opacity-50" />}
-        label={`${t("chat.message.toolWrite")} ${fileName || ""}`}
+        label={`${t("chat.message.toolWrite")} ${filePath || ""}`}
         variant="tool"
+        formatLabel={false}
         expandable={canExpand}
         onPanelOpen={() => {
           if (!canExpand) return;

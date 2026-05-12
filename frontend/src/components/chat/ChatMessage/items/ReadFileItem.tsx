@@ -127,6 +127,7 @@ const ReadFileItem = memo(function ReadFileItem({
         icon={<FileText size={12} className="shrink-0 opacity-50" />}
         label={`${t("chat.message.toolRead")} ${filePath || ""}`}
         variant="tool"
+        formatLabel={false}
         expandable={hasContent}
         onPanelOpen={() => {
           if (!hasContent) return;

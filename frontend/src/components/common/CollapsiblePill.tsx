@@ -25,6 +25,8 @@ export interface CollapsiblePillProps {
   onPanelOpen?: () => void;
   /** Add animated typing dots after label */
   animatedDots?: boolean;
+  /** Preserve label text exactly instead of applying title formatting */
+  formatLabel?: boolean;
 }
 
 // Get spinner color based on variant
@@ -178,6 +180,7 @@ export function CollapsiblePill({
   expandable = true,
   onPanelOpen,
   animatedDots = false,
+  formatLabel = true,
 }: CollapsiblePillProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const hasChildren = children !== undefined;
@@ -200,6 +203,7 @@ export function CollapsiblePill({
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
+  const displayedLabel = formatLabel ? formattedLabel : label;
 
   return (
     <div className="my-1 min-w-0 max-w-full">
@@ -217,11 +221,11 @@ export function CollapsiblePill({
         {icon}
         <span
           className={clsx(
-            "font-mono truncate min-w-0",
+            "font-mono min-w-0 truncate overflow-hidden",
             animatedDots && "typing-dots",
           )}
         >
-          {formattedLabel}
+          {displayedLabel}
         </span>
         {suffix}
         {canExpand && (

@@ -112,8 +112,9 @@ const EditFileItem = memo(function EditFileItem({
       <CollapsiblePill
         status={status}
         icon={<Pencil size={12} className="shrink-0 opacity-50" />}
-        label={`${t("chat.message.toolEdit")} ${fileName || ""}`}
+        label={`${t("chat.message.toolEdit")} ${filePath || ""}`}
         variant="tool"
+        formatLabel={false}
         expandable={canExpand}
         onPanelOpen={() => {
           if (!canExpand) return;

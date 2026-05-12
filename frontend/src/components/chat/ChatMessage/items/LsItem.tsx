@@ -105,8 +105,9 @@ const LsItem = memo(function LsItem({
       <CollapsiblePill
         status={status}
         icon={<FolderOpen size={12} className="shrink-0 opacity-50" />}
-        label={`${t("chat.message.toolLs")} ${displayLabel}`}
+        label={`${t("chat.message.toolLs")} ${dirPath}`}
         variant="tool"
+        formatLabel={false}
         expandable={canExpand}
         onPanelOpen={() => {
           if (!canExpand) return;

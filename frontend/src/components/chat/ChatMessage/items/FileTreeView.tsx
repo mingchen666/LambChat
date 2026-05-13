@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { useTranslation } from "react-i18next";
 import { getFileTypeInfo, isImageFile } from "../../../documents/utils";
 import { exportProjectZip } from "../../../../utils/exportProjectZip";
+import { countProjectRevealFiles } from "./projectRevealState";
 
 export interface TreeNode {
   name: string;
@@ -280,6 +281,10 @@ export function FileTreeView({
     () => buildFileTree(files, binaryFiles),
     [files, binaryFiles],
   );
+  const fileCount = useMemo(
+    () => countProjectRevealFiles(files, binaryFiles),
+    [files, binaryFiles],
+  );
 
   const toggleDir = useCallback((path: string) => {
     setExpandedDirs((prev) => {
@@ -296,7 +301,7 @@ export function FileTreeView({
         <div className="flex items-center justify-between px-3 py-2 border-b border-stone-200 dark:border-stone-700 shrink-0">
           <span className="text-xs text-stone-500 dark:text-stone-400">
             {t("project.fileCount", "{{count}} 个文件", {
-              count: Object.keys(files).length,
+              count: fileCount,
             })}
           </span>
           <button

@@ -10,6 +10,13 @@ export function normalizeProjectRevealBinaryFiles(
   return Object.keys(files).length === 0 ? EMPTY_BINARY_FILES : files;
 }
 
+export function countProjectRevealFiles(
+  files: Record<string, string>,
+  binaryFiles: Record<string, string>,
+): number {
+  return new Set([...Object.keys(files), ...Object.keys(binaryFiles)]).size;
+}
+
 export function areStringRecordMapsEqual(
   left: Record<string, string>,
   right: Record<string, string>,

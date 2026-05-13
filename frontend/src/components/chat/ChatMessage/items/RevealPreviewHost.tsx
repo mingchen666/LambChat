@@ -18,6 +18,7 @@ import type {
 import {
   getCachedProjectRevealFiles,
   loadProjectRevealFilesCached,
+  shouldShowProjectRevealLoadingError,
 } from "./revealPreviewData";
 import {
   EMPTY_BINARY_FILES,
@@ -155,9 +156,11 @@ function ProjectRevealPreviewPanel({
             failed,
           );
         }
-        const nextLoadingError =
-          Object.keys(files).length === 0 &&
-          Object.keys(project.files).length > 0;
+        const nextLoadingError = shouldShowProjectRevealLoadingError({
+          files,
+          binaryFiles: nextBinaryFiles,
+          manifestFiles: project.files,
+        });
         setLoadingError((current) =>
           current === nextLoadingError ? current : nextLoadingError,
         );

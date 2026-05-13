@@ -239,6 +239,18 @@ export async function loadProjectRevealFiles(
   };
 }
 
+export function shouldShowProjectRevealLoadingError(input: {
+  files: Record<string, string>;
+  binaryFiles: Record<string, string>;
+  manifestFiles: Record<string, FileManifestEntry>;
+}): boolean {
+  return (
+    Object.keys(input.files).length === 0 &&
+    Object.keys(input.binaryFiles).length === 0 &&
+    Object.keys(input.manifestFiles).length > 0
+  );
+}
+
 type LoadedProjectRevealFiles = Awaited<
   ReturnType<typeof loadProjectRevealFiles>
 >;

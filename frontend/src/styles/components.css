@@ -819,6 +819,10 @@
   padding: 0 0.75rem;
 }
 
+.glass-input.es-input.es-input--with-leading-icon {
+  padding-left: 2.5rem;
+}
+
 /* Textarea variant */
 .glass-input.es-textarea {
   padding: 0.75rem;

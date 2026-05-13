@@ -47,7 +47,7 @@
     "lucide-react": "^0.468.0",
     "mammoth": "^1.8.0",
     "mermaid": "^11.12.3",
-    "pdfjs-dist": "^4.10.38",
+    "pdfjs-dist": "^5.4.296",
     "process": "^0.11.10",
     "react": "19.2.5",
     "react-dom": "19.2.5",

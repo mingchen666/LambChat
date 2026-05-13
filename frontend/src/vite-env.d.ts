@@ -4,3 +4,8 @@ declare module "@lobehub/icons-static-svg/icons/*.svg?url" {
   const src: string;
   export default src;
 }
+
+declare module "*.mjs?url" {
+  const src: string;
+  export default src;
+}

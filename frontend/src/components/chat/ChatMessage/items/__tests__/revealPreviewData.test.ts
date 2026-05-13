@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseProjectRevealSummary } from "../revealPreviewData.ts";
+import {
+  parseProjectRevealSummary,
+  shouldShowProjectRevealLoadingError,
+} from "../revealPreviewData.ts";
 
 test("parses folder mode from reveal_project results", () => {
   const summary = parseProjectRevealSummary({
@@ -47,4 +50,28 @@ test("defaults legacy reveal_project results to project mode", () => {
   });
 
   assert.equal(summary.parsed?.mode, "project");
+});
+
+test("does not mark pure binary reveal_project folders as failed loads", () => {
+  const showError = shouldShowProjectRevealLoadingError({
+    files: {},
+    binaryFiles: {
+      "/main.png": "https://example.com/main.png",
+      "/detail.png": "https://example.com/detail.png",
+    },
+    manifestFiles: {
+      "/main.png": {
+        url: "https://example.com/main.png",
+        is_binary: true,
+        size: 100,
+      },
+      "/detail.png": {
+        url: "https://example.com/detail.png",
+        is_binary: true,
+        size: 100,
+      },
+    },
+  });
+
+  assert.equal(showError, false);
 });

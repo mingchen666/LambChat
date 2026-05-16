@@ -39,7 +39,12 @@ import {
   isNearSubagentPanelBottom,
   shouldAutoScrollSubagentPanel,
 } from "./subagentPanelScroll";
-import { shouldAutoOpenSubagentPanel } from "./subagentPanelControl";
+import {
+  dismissSubagentPanelAutoOpen,
+  isSubagentPanelAutoOpenDismissed,
+  resetSubagentPanelAutoOpenDismissal,
+  shouldAutoOpenSubagentPanel,
+} from "./subagentPanelControl";
 import { formatDateTime } from "../../../utils/datetime";
 
 function useSubagentPanelData(agentId: string): SubagentPanelData | undefined {
@@ -100,6 +105,7 @@ export function openSubagentPanelByAgentId(agentId: string): boolean {
     return true;
   }
 
+  resetSubagentPanelAutoOpenDismissal();
   openPersistentToolPanel({
     title: formattedAgentName,
     icon: <Users size={16} />,
@@ -107,6 +113,7 @@ export function openSubagentPanelByAgentId(agentId: string): boolean {
     subtitle,
     panelKey,
     children: <SubagentPanelContent agentId={agentId} />,
+    onUserClose: dismissSubagentPanelAutoOpen,
   });
 
   return true;
@@ -394,6 +401,7 @@ export function SubagentBlock({
       shouldAutoOpenSubagentPanel({
         status: effectiveStatus,
         anyPanelOpen: isPersistentToolPanelOpen(),
+        autoOpenDismissed: isSubagentPanelAutoOpenDismissed(),
       })
     ) {
       openPersistentToolPanel({
@@ -404,6 +412,7 @@ export function SubagentBlock({
         panelKey,
         children: <SubagentPanelContent agentId={agent_id} />,
         auto: true,
+        onUserClose: dismissSubagentPanelAutoOpen,
       });
     }
   }, [
@@ -431,6 +440,7 @@ export function SubagentBlock({
   }, [agent_id]);
 
   const handleOpenInPanel = useCallback(() => {
+    resetSubagentPanelAutoOpenDismissal();
     openPersistentToolPanel({
       title: formattedAgentName,
       icon: <Users size={16} />,
@@ -438,6 +448,7 @@ export function SubagentBlock({
       subtitle,
       panelKey,
       children: <SubagentPanelContent agentId={agent_id} />,
+      onUserClose: dismissSubagentPanelAutoOpen,
     });
   }, [formattedAgentName, panelStatus, subtitle, panelKey, agent_id]);
 

@@ -60,6 +60,8 @@ interface ToolResultPanelProps {
   onViewModeChange?: (mode: "sidebar" | "center") => void;
   /** Called when the user explicitly manipulates the panel UI */
   onUserInteraction?: () => void;
+  /** Called when the user explicitly closes the panel UI */
+  onUserClose?: () => void;
   /** Stable logical key to survive remounts without closing the same panel */
   registryKey?: string;
   /** Hide the built-in center/fullscreen buttons in the default header */
@@ -119,6 +121,7 @@ export function ToolResultPanel({
   panelClass,
   panelElementRef,
   onUserInteraction,
+  onUserClose,
   registryKey,
   hideViewToggle = false,
   onViewModeChange,
@@ -148,6 +151,12 @@ export function ToolResultPanel({
   const effectiveIsFullscreen = externalIsFullscreen ?? internalIsFullscreen;
   const isFullscreen = effectiveIsFullscreen;
 
+  const handleUserClose = useCallback(() => {
+    onUserClose?.();
+    clearSidebarHistory();
+    onClose();
+  }, [onUserClose, onClose]);
+
   const {
     isMobile,
     animateIn,
@@ -161,7 +170,7 @@ export function ToolResultPanel({
     handleResizeStart,
   } = useSidebarPanel({
     open,
-    onClose,
+    onClose: handleUserClose,
     widthStorageKey: WIDTH_STORAGE_KEY,
     widthCssVar: WIDTH_CSS_VAR,
     defaultWidthPct: DEFAULT_WIDTH_PCT,
@@ -244,11 +253,6 @@ export function ToolResultPanel({
     },
     [onUserInteraction, handleResizeStart],
   );
-
-  const handleUserClose = useCallback(() => {
-    clearSidebarHistory();
-    onClose();
-  }, [onClose]);
 
   if (!open) return null;
 

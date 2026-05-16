@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 
 // Available agents (sync with backend)
 const AGENT_IDS = ["default", "api", "data_pipeline", "simple_workflow"];
@@ -78,7 +79,27 @@ const cacheStableIconsPlugin = {
 };
 
 export default defineConfig({
-  plugins: [react(), cacheStableIconsPlugin],
+  plugins: [
+    react(),
+    VitePWA({
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
+      injectRegister: false,
+      manifest: false,
+      injectManifest: {
+        globPatterns: [
+          "**/*.{js,css,html,ico,png,svg,webp,avif,woff,woff2,json}",
+        ],
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+      },
+      includeManifestIcons: false,
+      devOptions: {
+        enabled: false,
+      },
+    }),
+    cacheStableIconsPlugin,
+  ],
   resolve: {
     alias: [
       {

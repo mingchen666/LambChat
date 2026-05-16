@@ -49,13 +49,60 @@ test("recognizes the skip waiting message without accepting arbitrary payloads",
   assert.equal(isPwaSkipWaitingMessage(null), false);
 });
 
+function readManifest() {
+  return JSON.parse(
+    readFileSync(resolve(import.meta.dirname, "../../public/manifest.json"), {
+      encoding: "utf8",
+    }),
+  );
+}
+
 test("manifest launch colors match the light app shell background", () => {
+  const manifest = readManifest() as {
+    background_color?: string;
+    theme_color?: string;
+  };
+
+  assert.equal(manifest.background_color, "#f5f5f4");
+  assert.equal(manifest.theme_color, "#f5f5f4");
+});
+
+test("manifest exposes install metadata for desktop, tablet, and phone PWAs", () => {
   const manifest = JSON.parse(
     readFileSync(resolve(import.meta.dirname, "../../public/manifest.json"), {
       encoding: "utf8",
     }),
-  ) as { background_color?: string; theme_color?: string };
+  ) as {
+    id?: string;
+    scope?: string;
+    display?: string;
+    display_override?: string[];
+    screenshots?: Array<{ form_factor?: string; sizes?: string }>;
+    icons?: Array<{ sizes?: string; purpose?: string }>;
+  };
 
-  assert.equal(manifest.background_color, "#f5f5f4");
-  assert.equal(manifest.theme_color, "#f5f5f4");
+  assert.equal(manifest.id, "/");
+  assert.equal(manifest.scope, "/");
+  assert.equal(manifest.display, "standalone");
+  assert.deepEqual(manifest.display_override, [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui",
+    "browser",
+  ]);
+  assert.ok(
+    manifest.icons?.some(
+      (icon) => icon.sizes === "512x512" && icon.purpose === "maskable",
+    ),
+  );
+  assert.ok(
+    manifest.screenshots?.some(
+      (screenshot) => screenshot.form_factor === "wide",
+    ),
+  );
+  assert.ok(
+    manifest.screenshots?.some(
+      (screenshot) => screenshot.form_factor === "narrow",
+    ),
+  );
 });

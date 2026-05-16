@@ -1,9 +1,10 @@
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { FolderTree, Code2, ChevronRight, Download, Copy } from "lucide-react";
 import clsx from "clsx";
 import { useTranslation } from "react-i18next";
 import type { MessagePart } from "../../../types";
 import { getFileTypeInfo, isImageFile } from "../../documents/utils";
+import { ImageViewer } from "../../common";
 import { openPersistentToolPanel } from "./items/persistentToolPanelState";
 import type { RevealPreviewOpenSource } from "./items/revealPreviewState";
 import type { RevealPreviewRequest } from "./items/revealPreviewData";
@@ -90,12 +91,14 @@ function getFileIcon(name: string) {
 function TreeFileRow({
   node,
   onOpenPreview,
+  onOpenImagePreview,
 }: {
   node: RevealArtifactTreeFile;
   onOpenPreview?: (
     preview: RevealPreviewRequest,
     source?: RevealPreviewOpenSource,
   ) => boolean;
+  onOpenImagePreview?: (artifact: RevealArtifact & { kind: "file" }) => void;
 }) {
   const { t } = useTranslation();
   const ext = node.artifact.name.split(".").pop()?.toLowerCase() || "";
@@ -104,7 +107,13 @@ function TreeFileRow({
   return (
     <button
       type="button"
-      onClick={() => onOpenPreview?.(node.artifact.preview, "manual")}
+      onClick={() => {
+        if (imageSrc && onOpenImagePreview) {
+          onOpenImagePreview(node.artifact);
+          return;
+        }
+        onOpenPreview?.(node.artifact.preview, "manual");
+      }}
       className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl hover:bg-stone-50 dark:hover:bg-stone-800/60 transition-colors group cursor-pointer"
     >
       {imageSrc ? (
@@ -157,6 +166,7 @@ function TreeDirRow({
   depth,
   defaultExpanded,
   onOpenPreview,
+  onOpenImagePreview,
 }: {
   node: RevealArtifactTreeDir;
   depth: number;
@@ -165,6 +175,7 @@ function TreeDirRow({
     preview: RevealPreviewRequest,
     source?: RevealPreviewOpenSource,
   ) => boolean;
+  onOpenImagePreview?: (artifact: RevealArtifact & { kind: "file" }) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
   const dirSize = expanded ? getTreeDirSize(node) : 0;
@@ -205,12 +216,14 @@ function TreeDirRow({
                 depth={depth + 1}
                 defaultExpanded={defaultExpanded}
                 onOpenPreview={onOpenPreview}
+                onOpenImagePreview={onOpenImagePreview}
               />
             ) : (
               <TreeFileRow
                 key={child.artifact.id}
                 node={child}
                 onOpenPreview={onOpenPreview}
+                onOpenImagePreview={onOpenImagePreview}
               />
             ),
           )}
@@ -319,6 +332,24 @@ function SectionTitle({
   );
 }
 
+interface RevealArtifactImagePreviewItem {
+  id: string;
+  name: string;
+  src: string;
+}
+
+export function getRevealArtifactImagePreviewItems(
+  artifacts: RevealArtifact[],
+): RevealArtifactImagePreviewItem[] {
+  return artifacts.flatMap((artifact) => {
+    if (artifact.kind !== "file") return [];
+    const ext = artifact.name.split(".").pop()?.toLowerCase() || "";
+    const src = artifact.preview.imageUrl || artifact.preview.signedUrl;
+    if (!src || !isImageFile(ext)) return [];
+    return [{ id: artifact.id, name: artifact.name, src }];
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
@@ -339,6 +370,9 @@ export function RevealArtifactsSummary({
   const artifacts = useMemo(() => collectRevealArtifacts(parts), [parts]);
   const subtitle = getArtifactSubtitle(artifacts, t);
   const stats = useMemo(() => getRevealArtifactStats(artifacts), [artifacts]);
+  const [activeImagePreviewId, setActiveImagePreviewId] = useState<
+    string | null
+  >(null);
 
   const fileTree = useMemo(
     () =>
@@ -356,6 +390,42 @@ export function RevealArtifactsSummary({
       ),
     [artifacts],
   );
+  const imagePreviewItems = useMemo(
+    () => getRevealArtifactImagePreviewItems(artifacts),
+    [artifacts],
+  );
+  const activeImageIndex = activeImagePreviewId
+    ? imagePreviewItems.findIndex((item) => item.id === activeImagePreviewId)
+    : -1;
+  const activeImageItem =
+    activeImageIndex >= 0 ? imagePreviewItems[activeImageIndex] : null;
+  const previousImageItem =
+    activeImageIndex > 0 ? imagePreviewItems[activeImageIndex - 1] : null;
+  const nextImageItem =
+    activeImageIndex >= 0 && activeImageIndex < imagePreviewItems.length - 1
+      ? imagePreviewItems[activeImageIndex + 1]
+      : null;
+  const imagePositionLabel =
+    activeImageIndex >= 0 && imagePreviewItems.length > 1
+      ? `${activeImageIndex + 1} / ${imagePreviewItems.length}`
+      : undefined;
+
+  const handleOpenImagePreview = useCallback(
+    (artifact: RevealArtifact & { kind: "file" }) => {
+      setActiveImagePreviewId(artifact.id);
+    },
+    [],
+  );
+  const handlePreviousImage = useCallback(() => {
+    if (previousImageItem) {
+      setActiveImagePreviewId(previousImageItem.id);
+    }
+  }, [previousImageItem]);
+  const handleNextImage = useCallback(() => {
+    if (nextImageItem) {
+      setActiveImagePreviewId(nextImageItem.id);
+    }
+  }, [nextImageItem]);
 
   if (isStreaming || artifacts.length === 0) {
     return null;
@@ -412,12 +482,14 @@ export function RevealArtifactsSummary({
                         depth={0}
                         defaultExpanded={false}
                         onOpenPreview={onOpenPreview}
+                        onOpenImagePreview={handleOpenImagePreview}
                       />
                     ) : (
                       <TreeFileRow
                         key={child.artifact.id}
                         node={child}
                         onOpenPreview={onOpenPreview}
+                        onOpenImagePreview={handleOpenImagePreview}
                       />
                     ),
                   )}
@@ -431,36 +503,51 @@ export function RevealArtifactsSummary({
   };
 
   return (
-    <section className="my-2 sm:my-3 min-w-0">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={handleOpenPanel}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            handleOpenPanel();
-          }
-        }}
-        className="group flex cursor-pointer items-center gap-3 rounded-2xl bg-[var(--theme-bg-card)] px-3 py-2.5 shadow-[0_1px_3px_var(--theme-shadow-sm)] ring-1 ring-[var(--theme-border)] transition-all duration-200 hover:shadow-[0_4px_12px_var(--theme-shadow-md)] hover:ring-[var(--theme-primary)]/30 sm:px-4 sm:py-3"
-      >
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--theme-primary-light)] transition-transform duration-200 group-hover:scale-105">
-          <FolderIcon size={28} className="shrink-0" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-[var(--theme-text)]">
-            {t("chat.message.allFiles", "全部文件")}
+    <>
+      <section className="my-2 sm:my-3 min-w-0">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={handleOpenPanel}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              handleOpenPanel();
+            }
+          }}
+          className="group flex cursor-pointer items-center gap-3 rounded-2xl bg-[var(--theme-bg-card)] px-3 py-2.5 shadow-[0_1px_3px_var(--theme-shadow-sm)] ring-1 ring-[var(--theme-border)] transition-all duration-200 hover:shadow-[0_4px_12px_var(--theme-shadow-md)] hover:ring-[var(--theme-primary)]/30 sm:px-4 sm:py-3"
+        >
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--theme-primary-light)] transition-transform duration-200 group-hover:scale-105">
+            <FolderIcon size={28} className="shrink-0" />
           </div>
-          <div className="mt-0.5 truncate text-xs text-[var(--theme-text-secondary)]">
-            {subtitle}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold text-[var(--theme-text)]">
+              {t("chat.message.allFiles", "全部文件")}
+            </div>
+            <div className="mt-0.5 truncate text-xs text-[var(--theme-text-secondary)]">
+              {subtitle}
+            </div>
+          </div>
+          <div className="relative z-10 flex shrink-0 items-center gap-1">
+            <span className="rounded-lg bg-[var(--theme-primary-light)] px-3 py-1.5 text-xs font-medium text-[var(--theme-primary)] ring-1 ring-[var(--theme-border)] transition-colors group-hover:bg-[var(--theme-primary)]/15 group-hover:ring-[var(--theme-primary)]/30">
+              {t("project.preview", "预览")}
+            </span>
           </div>
         </div>
-        <div className="relative z-10 flex shrink-0 items-center gap-1">
-          <span className="rounded-lg bg-[var(--theme-primary-light)] px-3 py-1.5 text-xs font-medium text-[var(--theme-primary)] ring-1 ring-[var(--theme-border)] transition-colors group-hover:bg-[var(--theme-primary)]/15 group-hover:ring-[var(--theme-primary)]/30">
-            {t("project.preview", "预览")}
-          </span>
-        </div>
-      </div>
-    </section>
+      </section>
+      {activeImageItem && (
+        <ImageViewer
+          src={activeImageItem.src}
+          alt={activeImageItem.name}
+          isOpen={!!activeImageItem}
+          onClose={() => setActiveImagePreviewId(null)}
+          onPrevious={handlePreviousImage}
+          onNext={handleNextImage}
+          hasPrevious={!!previousImageItem}
+          hasNext={!!nextImageItem}
+          positionLabel={imagePositionLabel}
+        />
+      )}
+    </>
   );
 }

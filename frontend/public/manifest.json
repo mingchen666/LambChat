@@ -6,7 +6,12 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["fullscreen", "standalone", "minimal-ui", "browser"],
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui",
+    "browser"
+  ],
   "orientation": "any",
   "background_color": "#f5f5f4",
   "theme_color": "#f5f5f4",
@@ -76,6 +81,13 @@
       "type": "image/png",
       "form_factor": "wide",
       "label": "LambChat AI agent workspace"
+    },
+    {
+      "src": "/images/best-practice/mobile-view.webp",
+      "sizes": "750x1624",
+      "type": "image/webp",
+      "form_factor": "narrow",
+      "label": "LambChat mobile chat workspace"
     }
   ],
   "launch_handler": {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { X, Download } from "lucide-react";
+import { X, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { ViewerToolbar } from "./ViewerToolbar";
 
 interface ImageViewerProps {
@@ -9,6 +9,11 @@ interface ImageViewerProps {
   alt?: string;
   isOpen: boolean;
   onClose: () => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
+  hasPrevious?: boolean;
+  hasNext?: boolean;
+  positionLabel?: string;
 }
 
 const MIN_SCALE = 0.1;
@@ -20,6 +25,11 @@ export function ImageViewer({
   alt = "",
   isOpen,
   onClose,
+  onPrevious,
+  onNext,
+  hasPrevious = false,
+  hasNext = false,
+  positionLabel,
 }: ImageViewerProps) {
   const { t } = useTranslation();
   const [scale, setScale] = useState(1);
@@ -36,6 +46,8 @@ export function ImageViewer({
     number | null
   >(null);
   const [initialScale, setInitialScale] = useState(1);
+  const canGoPrevious = hasPrevious && !!onPrevious;
+  const canGoNext = hasNext && !!onNext;
 
   useEffect(() => {
     if (isOpen) {
@@ -43,16 +55,28 @@ export function ImageViewer({
       setRotation(0);
       setPosition({ x: 0, y: 0 });
     }
-  }, [isOpen]);
+  }, [isOpen, src]);
 
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key === "ArrowLeft" && canGoPrevious) {
+        e.preventDefault();
+        onPrevious?.();
+        return;
+      }
+      if (e.key === "ArrowRight" && canGoNext) {
+        e.preventDefault();
+        onNext?.();
+      }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [canGoNext, canGoPrevious, isOpen, onClose, onNext, onPrevious]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -200,6 +224,12 @@ export function ImageViewer({
           <X size={20} className="text-white/70" />
         </button>
 
+        {positionLabel && (
+          <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium tabular-nums text-white/70">
+            {positionLabel}
+          </div>
+        )}
+
         <button
           type="button"
           onClick={() => {
@@ -244,6 +274,31 @@ export function ImageViewer({
             draggable={false}
           />
         </div>
+
+        {(onPrevious || onNext) && (
+          <>
+            <button
+              type="button"
+              onClick={onPrevious}
+              disabled={!canGoPrevious}
+              className="absolute left-2 sm:left-5 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white/75 transition-colors hover:bg-black/65 hover:text-white disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:bg-black/45 disabled:hover:text-white/75"
+              aria-label={t("imageViewer.previous", "Previous image")}
+              title={t("imageViewer.previous", "Previous image")}
+            >
+              <ChevronLeft size={28} />
+            </button>
+            <button
+              type="button"
+              onClick={onNext}
+              disabled={!canGoNext}
+              className="absolute right-2 sm:right-5 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white/75 transition-colors hover:bg-black/65 hover:text-white disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:bg-black/45 disabled:hover:text-white/75"
+              aria-label={t("imageViewer.next", "Next image")}
+              title={t("imageViewer.next", "Next image")}
+            >
+              <ChevronRight size={28} />
+            </button>
+          </>
+        )}
 
         <ViewerToolbar
           scale={scale}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useRevealedFilesGrouped } from "../../hooks/useRevealedFiles";
@@ -8,11 +8,16 @@ import { projectApi } from "../../services/api/project";
 import DocumentPreview from "../documents/DocumentPreview";
 import { ImageViewer, VideoViewer } from "../common";
 import { DelayedUnmount } from "../common/DelayedUnmount";
-import { getFileExtension, isImageFile, isVideoFile } from "../documents/utils";
+import { getFileExtension, isVideoFile } from "../documents/utils";
 import { Toolbar } from "./components/Toolbar";
 import { SessionGroup } from "./components/SessionGroup";
 import { EmptyState } from "./components/EmptyState";
 import type { SortOrder, ViewMode } from "./types";
+import {
+  getImagePreviewNavigation,
+  getPreviewableImageFiles,
+  isPreviewableImageFile,
+} from "./utils";
 import {
   buildExternalNavigationStateForFile,
   type ExternalNavigationState,
@@ -34,7 +39,8 @@ export function RevealedFilesPanel() {
     Array<{ id: string; name: string; type: string }>
   >([]);
   const [previewFile, setPreviewFile] = useState<RevealedFileItem | null>(null);
-  const [imageViewerSrc, setImageViewerSrc] = useState<string | null>(null);
+  const [imageViewerFile, setImageViewerFile] =
+    useState<RevealedFileItem | null>(null);
   const [videoViewerSrc, setVideoViewerSrc] = useState<string | null>(null);
 
   /* ── Data ── */
@@ -72,6 +78,22 @@ export function RevealedFilesPanel() {
       buildExternalNavigationStateForFile(file),
     [],
   );
+  const previewableImageFiles = useMemo(
+    () => getPreviewableImageFiles(sessionGroups),
+    [sessionGroups],
+  );
+  const imagePreviewNavigation = useMemo(
+    () => getImagePreviewNavigation(previewableImageFiles, imageViewerFile?.id),
+    [imageViewerFile?.id, previewableImageFiles],
+  );
+  const activeImageFile = imagePreviewNavigation.current ?? imageViewerFile;
+  const imageViewerSrc = activeImageFile?.url
+    ? getFullUrl(activeImageFile.url) ?? activeImageFile.url
+    : null;
+  const imageViewerPosition =
+    imagePreviewNavigation.index >= 0 && imagePreviewNavigation.total > 1
+      ? `${imagePreviewNavigation.index + 1} / ${imagePreviewNavigation.total}`
+      : undefined;
 
   /* ── Handlers ── */
   const handlePreview = useCallback(
@@ -83,8 +105,8 @@ export function RevealedFilesPanel() {
         return;
       }
       const ext = getFileExtension(file.file_name);
-      if (file.url && (file.file_type === "image" || isImageFile(ext))) {
-        setImageViewerSrc(getFullUrl(file.url) ?? file.url);
+      if (isPreviewableImageFile(file)) {
+        setImageViewerFile(file);
         return;
       }
       if (file.url && (file.file_type === "video" || isVideoFile(ext))) {
@@ -103,7 +125,20 @@ export function RevealedFilesPanel() {
     [buildFileNavigationState, navigate],
   );
   const handlePreviewClose = useCallback(() => setPreviewFile(null), []);
-  const handleImageViewerClose = useCallback(() => setImageViewerSrc(null), []);
+  const handleImageViewerClose = useCallback(
+    () => setImageViewerFile(null),
+    [],
+  );
+  const handlePreviousImage = useCallback(() => {
+    if (imagePreviewNavigation.previous) {
+      setImageViewerFile(imagePreviewNavigation.previous);
+    }
+  }, [imagePreviewNavigation.previous]);
+  const handleNextImage = useCallback(() => {
+    if (imagePreviewNavigation.next) {
+      setImageViewerFile(imagePreviewNavigation.next);
+    }
+  }, [imagePreviewNavigation.next]);
   const handleVideoViewerClose = useCallback(() => setVideoViewerSrc(null), []);
 
   return (
@@ -196,9 +231,14 @@ export function RevealedFilesPanel() {
       {imageViewerSrc && (
         <ImageViewer
           src={imageViewerSrc}
-          alt={previewFile?.file_name || ""}
+          alt={activeImageFile?.file_name || ""}
           isOpen={!!imageViewerSrc}
           onClose={handleImageViewerClose}
+          onPrevious={handlePreviousImage}
+          onNext={handleNextImage}
+          hasPrevious={!!imagePreviewNavigation.previous}
+          hasNext={!!imagePreviewNavigation.next}
+          positionLabel={imageViewerPosition}
         />
       )}
 

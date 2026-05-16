@@ -26,6 +26,7 @@ export interface PersistentToolPanelState {
   overlayClass?: string;
   panelClass?: string;
   onUserInteraction?: () => void;
+  onUserClose?: () => void;
   /** If true, skip opening on mobile devices */
   auto?: boolean;
   /** When true, mobile renders as full-viewport instead of bottom sheet */
@@ -128,6 +129,7 @@ export function PersistentToolPanelHost() {
       panelClass={panel.panelClass}
       mobileFillViewport={panel.mobileFillViewport}
       onUserInteraction={panel.onUserInteraction}
+      onUserClose={panel.onUserClose}
     >
       {panel.children}
     </ToolResultPanel>,

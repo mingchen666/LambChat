@@ -1,5 +1,10 @@
 import type { RevealedFileItem } from "../../services/api";
-import { formatFileSize, getFileTypeInfo } from "../documents/utils";
+import {
+  formatFileSize,
+  getFileExtension,
+  getFileTypeInfo,
+  isImageFile,
+} from "../documents/utils";
 import { formatTimeAgo } from "../../utils/datetime";
 import type { TFunction } from "i18next";
 
@@ -30,6 +35,46 @@ export function getSessionNavigationTarget(
   files: RevealedFileItem[],
 ): RevealedFileItem | null {
   return files[0] ?? null;
+}
+
+export function isPreviewableImageFile(file: RevealedFileItem): boolean {
+  if (!file.url) return false;
+  return (
+    file.file_type === "image" || isImageFile(getFileExtension(file.file_name))
+  );
+}
+
+export function getPreviewableImageFiles(
+  sessionGroups: Array<{ files: RevealedFileItem[] }>,
+): RevealedFileItem[] {
+  return sessionGroups.flatMap((group) =>
+    group.files.filter(isPreviewableImageFile),
+  );
+}
+
+export interface ImagePreviewNavigation {
+  current: RevealedFileItem | null;
+  previous: RevealedFileItem | null;
+  next: RevealedFileItem | null;
+  index: number;
+  total: number;
+}
+
+export function getImagePreviewNavigation(
+  files: RevealedFileItem[],
+  currentId: string | null | undefined,
+): ImagePreviewNavigation {
+  const index = currentId
+    ? files.findIndex((file) => file.id === currentId)
+    : -1;
+
+  return {
+    current: index >= 0 ? files[index] : null,
+    previous: index > 0 ? files[index - 1] : null,
+    next: index >= 0 && index < files.length - 1 ? files[index + 1] : null,
+    index,
+    total: files.length,
+  };
 }
 
 export type FileCardPreviewKind =

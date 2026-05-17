@@ -15,6 +15,9 @@ import time
 from collections import OrderedDict
 from typing import AsyncContextManager, Optional
 
+from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.checkpoint.base import empty_checkpoint
+
 from src.infra.logging import get_logger
 from src.kernel.config import settings
 
@@ -29,6 +32,7 @@ _MEMORY_SAVER_CLEANUP_INTERVAL = max(
     int(getattr(settings, "MEMORY_SAVER_CLEANUP_INTERVAL", 50) or 0),
     1,
 )
+_FORK_CHECKPOINT_SCAN_PAGE_SIZE = 25
 
 # MongoDB Checkpointer 单例
 _mongo_checkpointer: Optional[object] = None
@@ -280,6 +284,55 @@ def _extract_checkpoint_messages(checkpoint_tuple: object) -> list[object]:
     return messages if isinstance(messages, list) else []
 
 
+def _matches_fork_boundary(checkpoint_tuple: object, *, turn_index: int, target_type: str) -> bool:
+    messages = _extract_checkpoint_messages(checkpoint_tuple)
+    human_count = sum(1 for message in messages if _is_human_message(message))
+    if human_count != turn_index or not messages:
+        return False
+
+    last_message = messages[-1]
+    if target_type == "user":
+        return _is_human_message(last_message)
+    if target_type == "assistant":
+        return _is_ai_message(last_message)
+    return False
+
+
+async def _find_fork_boundary_checkpoint(
+    source_saver: object,
+    default_config: dict,
+    *,
+    turn_index: int,
+    target_type: str,
+) -> object | None:
+    before_config = None
+
+    while True:
+        page = [
+            item
+            async for item in source_saver.alist(
+                default_config,
+                before=before_config,
+                limit=_FORK_CHECKPOINT_SCAN_PAGE_SIZE,
+            )
+        ]
+        if not page:
+            return None
+
+        for checkpoint_tuple in page:
+            if _matches_fork_boundary(
+                checkpoint_tuple,
+                turn_index=turn_index,
+                target_type=target_type,
+            ):
+                return checkpoint_tuple
+
+        last_config = getattr(page[-1], "config", None)
+        if not last_config:
+            return None
+        before_config = last_config
+
+
 async def clone_checkpoints_for_fork(
     source_thread_id: str,
     target_thread_id: str,
@@ -291,59 +344,77 @@ async def clone_checkpoints_for_fork(
     source_saver = await get_async_checkpointer(thread_id=source_thread_id)
     target_saver = await get_async_checkpointer(thread_id=target_thread_id)
     default_config = {"configurable": {"thread_id": source_thread_id, "checkpoint_ns": ""}}
-    default_tuples = [item async for item in source_saver.alist(default_config)]
+    boundary_tuple = await _find_fork_boundary_checkpoint(
+        source_saver,
+        default_config,
+        turn_index=turn_index,
+        target_type=target_type,
+    )
 
-    boundary_checkpoint_id: str | None = None
-    for checkpoint_tuple in default_tuples:
-        messages = _extract_checkpoint_messages(checkpoint_tuple)
-        human_count = sum(1 for message in messages if _is_human_message(message))
-        if human_count != turn_index or not messages:
-            continue
-
-        last_message = messages[-1]
-        if target_type == "user" and _is_human_message(last_message):
-            boundary_checkpoint_id = checkpoint_tuple.config["configurable"]["checkpoint_id"]
-            break
-        if target_type == "assistant" and _is_ai_message(last_message):
-            boundary_checkpoint_id = checkpoint_tuple.config["configurable"]["checkpoint_id"]
-            break
-
-    if not boundary_checkpoint_id:
+    if boundary_tuple is None:
         raise ValueError(
             f"Unable to locate fork checkpoint for thread={source_thread_id} turn={turn_index} type={target_type}"
         )
 
-    all_tuples = [
-        item async for item in source_saver.alist({"configurable": {"thread_id": source_thread_id}})
-    ]
-    eligible_tuples = [
-        item
-        for item in all_tuples
-        if item.config["configurable"]["checkpoint_id"] <= boundary_checkpoint_id
-    ]
-    eligible_tuples.sort(key=lambda item: item.config["configurable"]["checkpoint_id"])
-
-    copied = 0
-    for checkpoint_tuple in eligible_tuples:
-        cfg = checkpoint_tuple.config["configurable"]
-        target_config = {
-            "configurable": {
-                "thread_id": target_thread_id,
-                "checkpoint_ns": cfg.get("checkpoint_ns", ""),
-            }
+    cfg = boundary_tuple.config["configurable"]
+    target_config = {
+        "configurable": {
+            "thread_id": target_thread_id,
+            "checkpoint_ns": cfg.get("checkpoint_ns", ""),
         }
-        parent_config = getattr(checkpoint_tuple, "parent_config", None)
-        if parent_config:
-            target_config["configurable"]["checkpoint_id"] = parent_config["configurable"][
-                "checkpoint_id"
-            ]
+    }
+    await target_saver.aput(
+        target_config,
+        copy.deepcopy(boundary_tuple.checkpoint),
+        copy.deepcopy(boundary_tuple.metadata),
+        copy.deepcopy(boundary_tuple.checkpoint.get("channel_versions", {})),
+    )
+    return 1
 
-        await target_saver.aput(
-            target_config,
-            copy.deepcopy(checkpoint_tuple.checkpoint),
-            copy.deepcopy(checkpoint_tuple.metadata),
-            copy.deepcopy(checkpoint_tuple.checkpoint.get("channel_versions", {})),
-        )
-        copied += 1
 
-    return copied
+async def seed_checkpoint_from_messages(
+    target_thread_id: str,
+    messages: list[object],
+) -> int:
+    """Seed a fork with a minimal message checkpoint when source checkpoints are absent."""
+    if not messages:
+        return 0
+
+    target_saver = await get_async_checkpointer(thread_id=target_thread_id)
+    checkpoint = empty_checkpoint()
+    checkpoint["channel_values"] = {"messages": copy.deepcopy(messages)}
+    checkpoint["channel_versions"] = {"messages": "1"}
+    checkpoint["versions_seen"] = {}
+    checkpoint["updated_channels"] = ["messages"]
+
+    await target_saver.aput(
+        {"configurable": {"thread_id": target_thread_id, "checkpoint_ns": ""}},
+        checkpoint,
+        {"source": "fork", "step": 0},
+        checkpoint["channel_versions"],
+    )
+    return 1
+
+
+def build_messages_from_trace_events(traces: list[dict]) -> list[object]:
+    """Build a minimal chat message list from persisted trace events."""
+    messages: list[object] = []
+    for trace in traces:
+        assistant_chunks: list[str] = []
+        for event in trace.get("events", []):
+            event_type = event.get("event_type")
+            data = event.get("data") or {}
+            if event_type == "user:message":
+                content = str(data.get("content") or data.get("message") or "")
+                if content:
+                    messages.append(HumanMessage(content=content))
+            elif event_type == "message:chunk":
+                content = str(data.get("content") or "")
+                if content:
+                    assistant_chunks.append(content)
+
+        assistant_content = "".join(assistant_chunks)
+        if assistant_content:
+            messages.append(AIMessage(content=assistant_content))
+
+    return messages

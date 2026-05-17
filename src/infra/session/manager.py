@@ -9,7 +9,11 @@ from typing import List, Optional
 from src.infra.logging import get_logger
 from src.infra.session.storage import SessionStorage
 from src.infra.session.trace_storage import get_trace_storage
-from src.infra.storage.checkpoint import clone_checkpoints_for_fork
+from src.infra.storage.checkpoint import (
+    build_messages_from_trace_events,
+    clone_checkpoints_for_fork,
+    seed_checkpoint_from_messages,
+)
 from src.infra.storage.s3 import get_storage_service
 from src.infra.upload.file_record import FileRecordStorage
 from src.infra.utils.datetime import utc_now, utc_now_iso
@@ -287,6 +291,8 @@ class SessionManager:
             user_id=user_id,
         )
 
+        copied_checkpoint_count = 0
+        checkpoint_clone_error: Exception | None = None
         try:
             copied_checkpoint_count = await clone_checkpoints_for_fork(
                 source_session.id,
@@ -294,18 +300,34 @@ class SessionManager:
                 turn_index=target["turn_index"],
                 target_type=target["target_type"],
             )
-            cloned_trace_count = await self._clone_history_to_session(
+        except Exception as exc:
+            checkpoint_clone_error = exc
+            logger.warning(
+                "Failed to clone fork checkpoints: source_session=%s target_session=%s message=%s error=%s",
+                source_session.id,
+                new_session.id,
+                message_id,
+                exc,
+            )
+
+        try:
+            cloned_traces = await self._clone_history_to_session(
                 source_session=source_session,
                 target_session=new_session,
                 target=target,
                 user_id=user_id,
             )
+            if copied_checkpoint_count == 0 and checkpoint_clone_error is not None:
+                copied_checkpoint_count = await seed_checkpoint_from_messages(
+                    new_session.id,
+                    build_messages_from_trace_events(cloned_traces),
+                )
             await self.storage.rebuild_search_index(new_session.id)
             return {
                 "session": new_session,
                 "source_session_id": source_session.id,
                 "source_message_id": message_id,
-                "copied_trace_count": cloned_trace_count,
+                "copied_trace_count": len(cloned_traces),
                 "copied_checkpoint_count": copied_checkpoint_count,
             }
         except Exception as exc:
@@ -319,15 +341,13 @@ class SessionManager:
         target_session: Session,
         target: dict,
         user_id: str,
-    ) -> int:
+    ) -> list[dict]:
         cursor = self.trace_storage.collection.find(
             {"session_id": source_session.id},
             {"_id": 0},
         ).sort("started_at", 1)
-        source_traces = await cursor.to_list(length=None)
-
         cloned_docs: list[dict] = []
-        for trace in source_traces:
+        async for trace in cursor:
             run_id = trace.get("run_id")
             if not run_id:
                 continue
@@ -349,7 +369,7 @@ class SessionManager:
 
         if cloned_docs:
             await self.trace_storage.collection.insert_many(cloned_docs)
-        return len(cloned_docs)
+        return cloned_docs
 
     async def _resolve_fork_target(self, session_id: str, message_id: str) -> dict:
         cursor = self.trace_storage.collection.find(

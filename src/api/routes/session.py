@@ -528,8 +528,10 @@ async def fork_session_from_message(
         return await manager.fork_session_from_message(session_id, message_id, user.sub)
     except NotFoundError as exc:
         detail = "消息不存在" if "message" in str(exc) else "资源不存在"
+        logger.warning("Fork 404: session=%s message=%s exc=%s", session_id, message_id, exc)
         raise HTTPException(status_code=404, detail=detail) from exc
     except SessionError as exc:
+        logger.error("Fork 500: session=%s message=%s exc=%s", session_id, message_id, exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
@@ -580,8 +582,14 @@ async def fork_session_from_checkpoint(
         )
     except NotFoundError as exc:
         detail = "检查点不存在" if "checkpoint" in str(exc) else "资源不存在"
+        logger.warning(
+            "Fork checkpoint 404: session=%s checkpoint=%s exc=%s", session_id, checkpoint_id, exc
+        )
         raise HTTPException(status_code=404, detail=detail) from exc
     except SessionError as exc:
+        logger.error(
+            "Fork checkpoint 500: session=%s checkpoint=%s exc=%s", session_id, checkpoint_id, exc
+        )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

@@ -13,10 +13,11 @@ Checkpoint 存储实现
 import copy
 import time
 from collections import OrderedDict
-from typing import AsyncContextManager, Optional
+from typing import Any, AsyncContextManager, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage
-from langgraph.checkpoint.base import empty_checkpoint
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointTuple, empty_checkpoint
 
 from src.infra.logging import get_logger
 from src.kernel.config import settings
@@ -35,11 +36,11 @@ _MEMORY_SAVER_CLEANUP_INTERVAL = max(
 _FORK_CHECKPOINT_SCAN_PAGE_SIZE = 25
 
 # MongoDB Checkpointer 单例
-_mongo_checkpointer: Optional[object] = None
+_mongo_checkpointer: Optional[BaseCheckpointSaver[Any]] = None
 
 # PostgreSQL Checkpointer 单例
-_pg_checkpointer: Optional[object] = None
-_pg_checkpointer_ctx: Optional[AsyncContextManager] = None
+_pg_checkpointer: Optional[BaseCheckpointSaver[Any]] = None
+_pg_checkpointer_ctx: Optional[AsyncContextManager[Any]] = None
 
 
 def _cleanup_memory_saver_cache(now: float | None = None) -> int:
@@ -83,7 +84,7 @@ def close_async_checkpointer() -> None:
         delattr(get_async_checkpointer, "_memory_saver_access_count")
 
 
-def get_mongo_checkpointer(collection_name: str = "checkpoints"):
+def get_mongo_checkpointer(collection_name: str = "checkpoints") -> BaseCheckpointSaver[Any] | None:
     """
     获取 MongoDB checkpointer 单例
 
@@ -135,7 +136,7 @@ def close_mongo_checkpointer():
         logger.info("MongoDB checkpointer reference released")
 
 
-async def get_pg_checkpointer():
+async def get_pg_checkpointer() -> BaseCheckpointSaver[Any] | None:
     """
     获取 PostgreSQL checkpointer 单例（异步）
 
@@ -197,7 +198,7 @@ async def close_pg_checkpointer():
             _pg_checkpointer_ctx = None
 
 
-async def get_async_checkpointer(thread_id: str | None = None):
+async def get_async_checkpointer(thread_id: str | None = None) -> BaseCheckpointSaver[Any]:
     """
     获取 checkpointer 实例（兼容异步调用）
 
@@ -277,14 +278,16 @@ def _is_ai_message(message: object) -> bool:
     return type(message).__name__ == "AIMessage"
 
 
-def _extract_checkpoint_messages(checkpoint_tuple: object) -> list[object]:
+def _extract_checkpoint_messages(checkpoint_tuple: CheckpointTuple) -> list[object]:
     checkpoint = getattr(checkpoint_tuple, "checkpoint", {}) or {}
     channel_values = checkpoint.get("channel_values", {}) if isinstance(checkpoint, dict) else {}
     messages = channel_values.get("messages", [])
     return messages if isinstance(messages, list) else []
 
 
-def _matches_fork_boundary(checkpoint_tuple: object, *, turn_index: int, target_type: str) -> bool:
+def _matches_fork_boundary(
+    checkpoint_tuple: CheckpointTuple, *, turn_index: int, target_type: str
+) -> bool:
     messages = _extract_checkpoint_messages(checkpoint_tuple)
     human_count = sum(1 for message in messages if _is_human_message(message))
     if human_count != turn_index or not messages:
@@ -299,13 +302,13 @@ def _matches_fork_boundary(checkpoint_tuple: object, *, turn_index: int, target_
 
 
 async def _find_fork_boundary_checkpoint(
-    source_saver: object,
-    default_config: dict,
+    source_saver: BaseCheckpointSaver[Any],
+    default_config: RunnableConfig,
     *,
     turn_index: int,
     target_type: str,
-) -> object | None:
-    before_config = None
+) -> CheckpointTuple | None:
+    before_config: RunnableConfig | None = None
 
     while True:
         page = [
@@ -343,7 +346,9 @@ async def clone_checkpoints_for_fork(
     """Clone checkpoint state up to the fork boundary into a new thread."""
     source_saver = await get_async_checkpointer(thread_id=source_thread_id)
     target_saver = await get_async_checkpointer(thread_id=target_thread_id)
-    default_config = {"configurable": {"thread_id": source_thread_id, "checkpoint_ns": ""}}
+    default_config: RunnableConfig = {
+        "configurable": {"thread_id": source_thread_id, "checkpoint_ns": ""}
+    }
     boundary_tuple = await _find_fork_boundary_checkpoint(
         source_saver,
         default_config,
@@ -357,7 +362,7 @@ async def clone_checkpoints_for_fork(
         )
 
     cfg = boundary_tuple.config["configurable"]
-    target_config = {
+    target_config: RunnableConfig = {
         "configurable": {
             "thread_id": target_thread_id,
             "checkpoint_ns": cfg.get("checkpoint_ns", ""),

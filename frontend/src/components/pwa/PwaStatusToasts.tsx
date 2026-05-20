@@ -36,7 +36,11 @@ function PwaStatusToast({
   return (
     <div className={`pwa-status-toast pwa-status-toast--${tone}`} role="status">
       <div className="pwa-status-toast__icon" aria-hidden="true">
-        {tone === "offline" ? <WifiOff size={18} /> : <RefreshCw size={18} />}
+        {tone === "offline" ? (
+          <WifiOff size={18} />
+        ) : (
+          <img src="/icons/icon.svg" alt="" width={20} height={20} />
+        )}
       </div>
       <div className="pwa-status-toast__content">
         <div className="pwa-status-toast__title">{title}</div>
@@ -48,7 +52,7 @@ function PwaStatusToast({
           type="button"
           onClick={action.onClick}
         >
-          <RefreshCw size={15} aria-hidden="true" />
+          <RefreshCw size={14} aria-hidden="true" />
           <span>{action.label}</span>
         </button>
       )}

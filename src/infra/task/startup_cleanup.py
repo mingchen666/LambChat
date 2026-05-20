@@ -11,6 +11,22 @@ from .status import TaskStatus
 logger = get_logger(__name__)
 
 
+def _task_metadata(session: dict[str, Any], session_model: Any) -> dict[str, Any]:
+    raw_metadata = session.get("metadata") if isinstance(session, dict) else {}
+    model_metadata = getattr(session_model, "metadata", None) or {}
+    return {
+        **(raw_metadata if isinstance(raw_metadata, dict) else {}),
+        **(model_metadata if isinstance(model_metadata, dict) else {}),
+    }
+
+
+def _is_user_cancelled_task(metadata: dict[str, Any]) -> bool:
+    return (
+        metadata.get("task_error_code") == "cancelled"
+        or metadata.get("task_status") == TaskStatus.CANCELLED.value
+    )
+
+
 class TaskStartupCleanupService:
     """Handles startup reconciliation for stale and queued tasks."""
 
@@ -56,6 +72,13 @@ class TaskStartupCleanupService:
                 session_id = session_model.id
                 run_id = session.get("metadata", {}).get("current_run_id")
                 if not run_id:
+                    continue
+                if _is_user_cancelled_task(_task_metadata(session, session_model)):
+                    logger.info(
+                        "Skipping user-cancelled RUNNING task during startup recovery: session=%s, run_id=%s",
+                        session_id,
+                        run_id,
+                    )
                     continue
 
                 heartbeat_exists = await self._heartbeat.check_exists(run_id)
@@ -109,6 +132,13 @@ class TaskStartupCleanupService:
                 run_id = session.get("metadata", {}).get("current_run_id")
                 user_id = session.get("user_id")
                 if not run_id or not user_id:
+                    continue
+                if _is_user_cancelled_task(_task_metadata(session, session_model)):
+                    logger.info(
+                        "Skipping user-cancelled PENDING task during startup recovery: session=%s, run_id=%s",
+                        session_id,
+                        run_id,
+                    )
                     continue
 
                 active_key = f"chat:active:{user_id}"
@@ -277,6 +307,13 @@ class TaskStartupCleanupService:
                 run_id = session.get("metadata", {}).get("current_run_id")
                 user_id = session.get("user_id")
                 if not run_id or not user_id:
+                    continue
+                if _is_user_cancelled_task(_task_metadata(session, session_model)):
+                    logger.info(
+                        "Skipping user-cancelled queued task replay during startup recovery: session=%s, run_id=%s",
+                        session_id,
+                        run_id,
+                    )
                     continue
 
                 queue_key = f"chat:queue:{user_id}"

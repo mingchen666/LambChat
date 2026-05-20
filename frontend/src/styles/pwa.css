@@ -115,10 +115,36 @@
 @media (max-width: 520px) {
   .pwa-status-toast {
     grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 10px 10px 12px;
+    border-radius: 14px;
+  }
+
+  .pwa-status-toast__icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  .pwa-status-toast__title {
+    font-size: 0.88rem;
+  }
+
+  .pwa-status-toast__body {
+    font-size: 0.78rem;
+    margin-top: 1px;
   }
 
   .pwa-status-toast__action {
     grid-column: 2 / 4;
     width: 100%;
+    height: 34px;
+    margin-top: 2px;
+    border-radius: 10px;
+  }
+
+  .pwa-status-toast__dismiss {
+    width: 28px;
+    height: 28px;
   }
 }

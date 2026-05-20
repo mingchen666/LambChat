@@ -386,6 +386,18 @@ async def test_startup_cleanup_service_skips_user_cancelled_abandoned_queued_ses
                 }
             ],
             [],
+            [
+                {
+                    "_id": "mongo-1",
+                    "session_id": "session-1",
+                    "user_id": "user-1",
+                    "metadata": {
+                        "current_run_id": "run-old",
+                        "task_error_code": "cancelled",
+                        "task_recoverable": False,
+                    },
+                }
+            ],
         ]
     )
     heartbeat = _FakeHeartbeat(exists=False)
@@ -398,6 +410,9 @@ async def test_startup_cleanup_service_skips_user_cancelled_abandoned_queued_ses
     async def _fake_resume(session, source_run_id: str, reason: str):
         recovery_calls.append((session.id, source_run_id, reason))
         return {"success": True, "run_id": "run-new", "message": "ok"}
+
+    async def _no_op() -> None:
+        return None
 
     class _FakeLimiterRedis:
         async def zscore(self, key: str, member: str):
@@ -421,7 +436,7 @@ async def test_startup_cleanup_service_skips_user_cancelled_abandoned_queued_ses
         ensure_executor=lambda: None,
         load_session_record=_fake_load_session,
         resume_interrupted_run=_fake_resume,
-        cleanup_stale_queues=lambda: None,
+        cleanup_stale_queues=_no_op,
     )
 
     await service.cleanup_stale_tasks()

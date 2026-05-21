@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Code2, FolderTree } from "lucide-react";
 import clsx from "clsx";
 import { useTranslation } from "react-i18next";
-import { LoadingSpinner } from "../../../common";
+import { LoadingSpinner, ImageViewer } from "../../../common";
 import { LazyDocumentPreview } from "../../../documents/LazyDocumentPreview";
 import { LazyProjectPreview } from "../../../documents/previews/LazyProjectPreview";
 import { ToolResultPanel } from "./ToolResultPanel";
@@ -30,6 +30,41 @@ import { createActiveRevealPreviewState } from "./revealPreviewState";
 import { setActiveRevealPreviewState } from "./activeRevealPreviewStore";
 import { FileTreeView } from "./FileTreeView";
 import type { TreeNode } from "./FileTreeView";
+
+interface ImageNodeInfo {
+  path: string;
+  name: string;
+  url: string;
+}
+
+function collectImageNodes(
+  files: Record<string, string>,
+  binaryFiles: Record<string, string>,
+): ImageNodeInfo[] {
+  const images: ImageNodeInfo[] = [];
+  const seen = new Set<string>();
+  const allPaths = [...Object.keys(binaryFiles), ...Object.keys(files)].sort();
+  for (const filePath of allPaths) {
+    if (seen.has(filePath)) continue;
+    seen.add(filePath);
+    const name = filePath.replace(/^\/?/, "").split("/").pop() || "";
+    const ext = name.split(".").pop()?.toLowerCase() || "";
+    if (!isImageFile(ext)) continue;
+    const url = binaryFiles[filePath];
+    if (url) {
+      images.push({ path: filePath, name, url });
+    } else if (files[filePath]) {
+      images.push({
+        path: filePath,
+        name,
+        url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+          files[filePath],
+        )}`,
+      });
+    }
+  }
+  return images;
+}
 
 function ProjectRevealPreviewPanel({
   project,
@@ -67,6 +102,7 @@ function ProjectRevealPreviewPanel({
     normalizeProjectRevealBinaryFiles(cached?.binaryFiles),
   );
   const [loadingError, setLoadingError] = useState(false);
+  const [activeImagePath, setActiveImagePath] = useState<string | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 639px)");
@@ -191,10 +227,37 @@ function ProjectRevealPreviewPanel({
 
   const filesForPreview = loadedFiles || {};
 
+  const imageNodes = useMemo(
+    () => (loadedFiles ? collectImageNodes(loadedFiles, binaryFiles) : []),
+    [loadedFiles, binaryFiles],
+  );
+  const activeImageIndex = activeImagePath
+    ? imageNodes.findIndex((img) => img.path === activeImagePath)
+    : -1;
+  const activeImage =
+    activeImageIndex >= 0 ? imageNodes[activeImageIndex] : null;
+  const previousImage =
+    activeImageIndex > 0 ? imageNodes[activeImageIndex - 1] : null;
+  const nextImage =
+    activeImageIndex >= 0 && activeImageIndex < imageNodes.length - 1
+      ? imageNodes[activeImageIndex + 1]
+      : null;
+  const imagePositionLabel =
+    activeImageIndex >= 0 && imageNodes.length > 1
+      ? `${activeImageIndex + 1} / ${imageNodes.length}`
+      : undefined;
+
   const handleFileClickInTree = useCallback(
     (node: TreeNode) => {
       if (!loadedFiles) return;
       const ext = node.name.split(".").pop()?.toLowerCase() || "";
+      if (isImageFile(ext)) {
+        const url = node.isBinary ? node.url : loadedFiles[node.path];
+        if (url) {
+          setActiveImagePath(node.path);
+          return;
+        }
+      }
       const filePreview: RevealPreviewRequest = {
         kind: "file",
         previewKey: `project-file:${node.path}`,
@@ -202,9 +265,6 @@ function ProjectRevealPreviewPanel({
         ...(node.isBinary
           ? { signedUrl: node.url }
           : { content: loadedFiles[node.path] }),
-        ...(isImageFile(ext) && node.isBinary && node.url
-          ? { imageUrl: node.url }
-          : {}),
         fileSize: node.size,
       };
       setActiveRevealPreviewState(
@@ -215,87 +275,104 @@ function ProjectRevealPreviewPanel({
   );
 
   return (
-    <ToolResultPanel
-      open={true}
-      onClose={onClose}
-      registryKey={registryKey}
-      title={project.name || t("project.untitled")}
-      icon={<Code2 size={16} />}
-      status="success"
-      subtitle={`${
-        project.template !== "static" ? `${project.template} · ` : ""
-      }${t("project.fileCount", {
-        count: project.fileCount,
-      })}`}
-      viewMode={isMobile ? "center" : viewMode}
-      onViewModeChange={(mode) => setViewMode(mode)}
-      isFullscreen={isBrowserFullscreen}
-      mobileFillViewport
-      onFullscreenChange={(fs) => {
-        if (fs) {
-          void enterBrowserFullscreen();
-        } else {
-          if (document.fullscreenElement) {
-            document.exitFullscreen();
+    <>
+      <ToolResultPanel
+        open={true}
+        onClose={onClose}
+        registryKey={registryKey}
+        title={project.name || t("project.untitled")}
+        icon={<Code2 size={16} />}
+        status="success"
+        subtitle={`${
+          project.template !== "static" ? `${project.template} · ` : ""
+        }${t("project.fileCount", {
+          count: project.fileCount,
+        })}`}
+        viewMode={isMobile ? "center" : viewMode}
+        onViewModeChange={(mode) => setViewMode(mode)}
+        isFullscreen={isBrowserFullscreen}
+        mobileFillViewport
+        onFullscreenChange={(fs) => {
+          if (fs) {
+            void enterBrowserFullscreen();
+          } else {
+            if (document.fullscreenElement) {
+              document.exitFullscreen();
+            }
           }
+        }}
+        panelElementRef={panelElementRef}
+        onUserInteraction={onUserInteraction}
+        headerActions={
+          !isFolder ? (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={() => setShowExplorer(!showExplorer)}
+                className={clsx(
+                  "flex items-center justify-center w-8 h-8 rounded-xl transition-all duration-200 active:scale-95",
+                  showExplorer
+                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                    : "hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-400 dark:text-stone-500",
+                )}
+                title={t("project.toggleExplorer", "切换文件浏览器")}
+              >
+                <FolderTree size={18} />
+              </button>
+            </div>
+          ) : undefined
         }
-      }}
-      panelElementRef={panelElementRef}
-      onUserInteraction={onUserInteraction}
-      headerActions={
-        !isFolder ? (
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={() => setShowExplorer(!showExplorer)}
-              className={clsx(
-                "flex items-center justify-center w-8 h-8 rounded-xl transition-all duration-200 active:scale-95",
-                showExplorer
-                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                  : "hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-400 dark:text-stone-500",
-              )}
-              title={t("project.toggleExplorer", "切换文件浏览器")}
-            >
-              <FolderTree size={18} />
-            </button>
+      >
+        {loadingError ? (
+          <div className="p-6 text-sm text-amber-600 dark:text-amber-400">
+            {t("project.loadFilesFailed")}
           </div>
-        ) : undefined
-      }
-    >
-      {loadingError ? (
-        <div className="p-6 text-sm text-amber-600 dark:text-amber-400">
-          {t("project.loadFilesFailed")}
-        </div>
-      ) : !loadedFiles ? (
-        <div className="h-full bg-stone-900 flex items-center justify-center">
-          <div className="text-stone-400 text-sm flex items-center gap-2">
-            <LoadingSpinner size="sm" className="text-stone-400" />
-            {t("project.loadingFiles")}
+        ) : !loadedFiles ? (
+          <div className="h-full bg-stone-900 flex items-center justify-center">
+            <div className="text-stone-400 text-sm flex items-center gap-2">
+              <LoadingSpinner size="sm" className="text-stone-400" />
+              {t("project.loadingFiles")}
+            </div>
           </div>
-        </div>
-      ) : showExplorer || isFolder ? (
-        <FileTreeView
-          files={loadedFiles}
-          binaryFiles={binaryFiles}
-          projectName={project.name}
-          onFileClick={handleFileClickInTree}
-        />
-      ) : (
-        <LazyProjectPreview
-          name={project.name}
-          template={project.template}
-          mode={project.mode}
-          files={filesForPreview}
-          entry={project.entry}
-          isFullscreen={viewMode === "center" || isBrowserFullscreen}
-          showHeader={false}
-          onToggleSidebar={
-            viewMode === "center" && !isBrowserFullscreen
-              ? () => setViewMode("sidebar")
-              : undefined
+        ) : showExplorer || isFolder ? (
+          <FileTreeView
+            files={loadedFiles}
+            binaryFiles={binaryFiles}
+            projectName={project.name}
+            onFileClick={handleFileClickInTree}
+          />
+        ) : (
+          <LazyProjectPreview
+            name={project.name}
+            template={project.template}
+            mode={project.mode}
+            files={filesForPreview}
+            entry={project.entry}
+            isFullscreen={viewMode === "center" || isBrowserFullscreen}
+            showHeader={false}
+            onToggleSidebar={
+              viewMode === "center" && !isBrowserFullscreen
+                ? () => setViewMode("sidebar")
+                : undefined
+            }
+          />
+        )}
+      </ToolResultPanel>
+      {activeImage && (
+        <ImageViewer
+          src={activeImage.url}
+          alt={activeImage.name}
+          isOpen={!!activeImage}
+          onClose={() => setActiveImagePath(null)}
+          onPrevious={() =>
+            previousImage && setActiveImagePath(previousImage.path)
           }
+          onNext={() => nextImage && setActiveImagePath(nextImage.path)}
+          hasPrevious={!!previousImage}
+          hasNext={!!nextImage}
+          positionLabel={imagePositionLabel}
         />
       )}
-    </ToolResultPanel>
+    </>
   );
 }
 

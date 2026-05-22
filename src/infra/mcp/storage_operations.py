@@ -237,7 +237,17 @@ class StorageOperations:
 
             if is_enabled:
                 # Deep copy to avoid modifying the original document
-                system_servers[server_name] = self._doc_to_config_dict(copy.deepcopy(doc))
+                config = self._doc_to_config_dict(copy.deepcopy(doc))
+                list_tool_policies = getattr(self, "list_tool_policies", None)
+                tool_policies = (
+                    await list_tool_policies(server_name) if callable(list_tool_policies) else {}
+                )
+                if tool_policies:
+                    config["tool_policies"] = {
+                        tool_name: policy.model_dump(mode="json")
+                        for tool_name, policy in tool_policies.items()
+                    }
+                system_servers[server_name] = config
 
         # Get enabled user servers
         user_collection = self._get_user_collection()

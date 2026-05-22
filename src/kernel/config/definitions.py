@@ -514,6 +514,50 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "depends_on": "ENABLE_AUDIO_TRANSCRIPTION",
     },
     # ============================================
+    # Image Generation Settings
+    # ============================================
+    "ENABLE_IMAGE_GENERATION": {
+        "type": SettingType.BOOLEAN,
+        "category": SettingCategory.TOOLS,
+        "subcategory": "image_generation",
+        "description": "settingDesc.ENABLE_IMAGE_GENERATION",
+        "default": False,
+        "frontend_visible": True,
+    },
+    "IMAGE_GENERATION_API_KEY": {
+        "type": SettingType.STRING,
+        "category": SettingCategory.TOOLS,
+        "subcategory": "image_generation",
+        "description": "settingDesc.IMAGE_GENERATION_API_KEY",
+        "default": "",
+        "is_sensitive": True,
+        "depends_on": "ENABLE_IMAGE_GENERATION",
+    },
+    "IMAGE_GENERATION_BASE_URL": {
+        "type": SettingType.STRING,
+        "category": SettingCategory.TOOLS,
+        "subcategory": "image_generation",
+        "description": "settingDesc.IMAGE_GENERATION_BASE_URL",
+        "default": "https://api.openai.com/v1",
+        "depends_on": "ENABLE_IMAGE_GENERATION",
+    },
+    "IMAGE_GENERATION_MODEL": {
+        "type": SettingType.STRING,
+        "category": SettingCategory.TOOLS,
+        "subcategory": "image_generation",
+        "description": "settingDesc.IMAGE_GENERATION_MODEL",
+        "default": "gpt-image-2",
+        "depends_on": "ENABLE_IMAGE_GENERATION",
+    },
+    "IMAGE_GENERATION_TIMEOUT": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.TOOLS,
+        "subcategory": "image_generation",
+        "description": "settingDesc.IMAGE_GENERATION_TIMEOUT",
+        "default": 120,
+        "depends_on": "ENABLE_IMAGE_GENERATION",
+    },
+    # ============================================
     # MongoDB Settings
     # ============================================
     "MONGODB_URL": {

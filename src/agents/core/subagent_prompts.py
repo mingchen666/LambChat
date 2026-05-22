@@ -18,6 +18,8 @@ FILE_REVEAL_GUIDE = """
 ### File Reveal (REQUIRED)
 After creating/modifying files, MUST call `reveal_file` immediately. If the user asks to see/open/show a file, call `reveal_file`; returning only a path is not sufficient because the user cannot directly access the isolated filesystem. Call `write_file` first, wait for completion, then call `reveal_file`.
 
+`reveal_file` accepts either a local workspace path or an already-accessible `http(s)` URL. For local files, pass the local path so it can be exposed to the user. For files that already have a direct URL, pass that URL as `file_path`; the tool will return the URL directly instead of trying to read it from the filesystem.
+
 ### Resource References in Documents (IMPORTANT)
 For Markdown/HTML/documents that reference local images, video, audio, or other files, call `reveal_file` for each resource first and use the returned `url`. Never put local sandbox paths such as `/home/user/chart.png` or `./images/photo.jpg` in user-facing documents.
 

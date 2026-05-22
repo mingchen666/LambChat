@@ -14,8 +14,8 @@ from src.agents.core.tool_filter import (
 )
 from src.infra.logging import get_logger
 from src.infra.skill.manager import SkillManager
-from src.infra.tool.audio_transcribe_tool import get_audio_transcribe_tool
 from src.infra.tool.human_tool import get_human_tool
+from src.infra.tool.internal_registry import get_internal_tools_for_user
 from src.infra.tool.mcp_global import get_global_mcp_tools
 from src.infra.tool.reveal_file_tool import get_reveal_file_tool
 from src.infra.tool.reveal_project_tool import get_reveal_project_tool
@@ -179,21 +179,21 @@ class FastAgentContext:
         self.tools.append(transfer_path_tool)
         logger.info("[FastAgentContext] Added transfer_path tool")
 
-        if settings.ENABLE_AUDIO_TRANSCRIPTION:
-            audio_transcribe_tool = get_audio_transcribe_tool()
-            self.tools.append(audio_transcribe_tool)
-            logger.info("[FastAgentContext] Added audio_transcribe tool")
+        try:
+            from src.infra.mcp.quota import resolve_user_mcp_access
 
-        from src.infra.tool.env_var_tool import get_env_var_tools
-        from src.infra.tool.persona_preset_tool import get_persona_preset_tools
-
-        env_var_tools = get_env_var_tools()
-        self.tools.extend(env_var_tools)
-        logger.info(f"[FastAgentContext] Added {len(env_var_tools)} env var tools")
-
-        persona_preset_tools = get_persona_preset_tools()
-        self.tools.extend(persona_preset_tools)
-        logger.info(f"[FastAgentContext] Added {len(persona_preset_tools)} persona preset tools")
+            user_roles, is_admin = (
+                await resolve_user_mcp_access(self.user_id) if self.user_id else ([], False)
+            )
+            internal_tools = await get_internal_tools_for_user(
+                user_id=self.user_id,
+                user_roles=user_roles,
+                is_admin=is_admin,
+            )
+            self.tools.extend(internal_tools)
+            logger.info(f"[FastAgentContext] Added {len(internal_tools)} internal tools")
+        except Exception as e:
+            logger.warning(f"[FastAgentContext] Failed to load internal tools: {e}")
 
         # Memory 工具（原生 MongoDB 后端）
         if settings.ENABLE_MEMORY:

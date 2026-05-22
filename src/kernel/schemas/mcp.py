@@ -49,6 +49,33 @@ class MCPRoleQuota(BaseModel):
     )
 
 
+class MCPToolPolicy(BaseModel):
+    """Per-tool MCP access and usage policy."""
+
+    server_name: Optional[str] = Field(None, description="Owning MCP server name")
+    tool_name: Optional[str] = Field(None, description="Tool name without server prefix")
+    disabled: bool = Field(False, description="Whether this tool is disabled globally")
+    allowed_roles: list[str] = Field(
+        default_factory=list,
+        description="Roles allowed to use this tool. Empty list = all roles.",
+    )
+    role_quotas: dict[str, MCPRoleQuota] = Field(
+        default_factory=dict,
+        description="Per-role usage quotas for this tool.",
+    )
+    created_at: Optional[str] = Field(None, description="Creation timestamp")
+    updated_at: Optional[str] = Field(None, description="Last update timestamp")
+    updated_by: Optional[str] = Field(None, description="Admin user ID who last updated")
+
+
+class MCPToolPolicyUpdate(BaseModel):
+    """Request to update one tool's access and quota policy."""
+
+    disabled: Optional[bool] = None
+    allowed_roles: Optional[list[str]] = None
+    role_quotas: Optional[dict[str, MCPRoleQuota]] = None
+
+
 class MCPServerCreate(MCPServerBase):
     """Schema for creating a new MCP server"""
 
@@ -79,6 +106,7 @@ class SystemMCPServer(MCPServerBase):
     """System-level MCP server configuration (admin managed)"""
 
     is_system: bool = Field(True, description="Always True for system servers")
+    is_internal: bool = Field(False, description="Whether this is a virtual internal server")
     disabled_tools: list[str] = Field(
         default_factory=list, description="List of tool names disabled at system level"
     )
@@ -112,6 +140,7 @@ class MCPServerResponse(MCPServerBase):
     """MCP server response with additional metadata"""
 
     is_system: bool = Field(..., description="Whether this is a system server")
+    is_internal: bool = Field(False, description="Whether this is a virtual internal server")
     can_edit: bool = Field(..., description="Whether current user can edit this server")
     allowed_roles: list[str] = Field(
         default_factory=list,
@@ -205,6 +234,18 @@ class MCPToolInfo(BaseModel):
     )
     user_disabled: bool = Field(
         default=False, description="Whether this tool is disabled by the current user"
+    )
+    allowed_roles: list[str] = Field(
+        default_factory=list,
+        description="Roles allowed to use this tool. Empty list = all roles.",
+    )
+    role_quotas: dict[str, MCPRoleQuota] = Field(
+        default_factory=dict,
+        description="Per-role usage quotas for this tool.",
+    )
+    policy_configured: bool = Field(
+        default=False,
+        description="Whether this tool has an explicit tool-level policy.",
     )
 
 

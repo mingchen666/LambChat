@@ -1,0 +1,172 @@
+"""Registry for LambChat internal tools exposed through the MCP UI."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
+from langchain_core.tools import BaseTool
+
+from src.infra.mcp.storage import MCPStorage
+from src.infra.tool.audio_transcribe_tool import get_audio_transcribe_tool
+from src.infra.tool.env_var_tool import get_env_var_tools
+from src.infra.tool.image_generation_tool import get_image_generation_tool
+from src.infra.tool.mcp_client import MCPToolWithRetry
+from src.infra.tool.persona_preset_tool import get_persona_preset_tools
+from src.kernel.config import settings
+from src.kernel.schemas.mcp import (
+    MCPServerResponse,
+    MCPToolInfo,
+    MCPToolPolicy,
+    MCPTransport,
+)
+
+INTERNAL_MCP_SERVER_NAME = "lambchat_internal"
+
+
+def build_internal_tools() -> list[BaseTool]:
+    """Build the internal tool set that LambChat exposes to agents."""
+    tools: list[BaseTool] = []
+
+    if settings.ENABLE_IMAGE_GENERATION:
+        tools.append(get_image_generation_tool())
+
+    if settings.ENABLE_AUDIO_TRANSCRIPTION:
+        tools.append(get_audio_transcribe_tool())
+
+    tools.extend(get_env_var_tools())
+    tools.extend(get_persona_preset_tools())
+    return tools
+
+
+def build_internal_server_response() -> MCPServerResponse:
+    """Build the virtual server row for the /mcp UI."""
+    return MCPServerResponse(
+        name=INTERNAL_MCP_SERVER_NAME,
+        transport=MCPTransport.SANDBOX,
+        enabled=True,
+        is_system=True,
+        is_internal=True,
+        can_edit=True,
+        allowed_roles=[],
+        role_quotas={},
+    )
+
+
+def _policy_for_tool(
+    policies: Mapping[str, MCPToolPolicy],
+    tool_name: str,
+) -> MCPToolPolicy | None:
+    policy = policies.get(tool_name)
+    return policy if policy is not None else None
+
+
+def _is_tool_allowed(
+    *,
+    policy: MCPToolPolicy | None,
+    user_roles: list[str] | None,
+    is_admin: bool,
+) -> bool:
+    if is_admin:
+        return True
+    if policy is None:
+        return True
+    if policy.disabled:
+        return False
+    if not policy.allowed_roles:
+        return True
+    return bool(set(user_roles or []).intersection(policy.allowed_roles))
+
+
+async def get_internal_tool_policies() -> dict[str, MCPToolPolicy]:
+    """Load explicit tool policies for the internal virtual server."""
+    try:
+        return await MCPStorage().list_tool_policies(INTERNAL_MCP_SERVER_NAME)
+    except Exception:
+        return {}
+
+
+async def get_internal_tools_for_user(
+    *,
+    user_id: str | None,
+    user_roles: list[str] | None,
+    is_admin: bool,
+) -> list[BaseTool]:
+    """Return internal tools filtered and wrapped by per-tool policy."""
+    tools = build_internal_tools()
+    if not tools:
+        return []
+
+    policies = await get_internal_tool_policies()
+    wrapped: list[BaseTool] = []
+    for tool in tools:
+        policy = _policy_for_tool(policies, tool.name)
+        if not _is_tool_allowed(policy=policy, user_roles=user_roles, is_admin=is_admin):
+            continue
+
+        wrapped.append(
+            MCPToolWithRetry(
+                tool,
+                user_id=user_id,
+                server_name=INTERNAL_MCP_SERVER_NAME,
+                user_roles=user_roles,
+                is_admin=is_admin,
+                role_quotas=(policy.role_quotas if policy else None),
+                quota_tool_name=tool.name,
+            )
+        )
+    return wrapped
+
+
+async def get_internal_tool_infos(
+    *,
+    user_id: str | None,
+    user_roles: list[str] | None,
+    is_admin: bool,
+) -> list[MCPToolInfo]:
+    """Return tool metadata for the virtual internal server."""
+    del user_id
+    policies = await get_internal_tool_policies()
+    infos: list[MCPToolInfo] = []
+    for tool in build_internal_tools():
+        policy = _policy_for_tool(policies, tool.name)
+        if not _is_tool_allowed(policy=policy, user_roles=user_roles, is_admin=is_admin):
+            continue
+
+        parameters: list[dict[str, Any]] = []
+        try:
+            if hasattr(tool, "args_schema") and tool.args_schema:
+                schema = (
+                    tool.args_schema
+                    if isinstance(tool.args_schema, dict)
+                    else tool.args_schema.schema()
+                )
+                properties = schema.get("properties", {})
+                required = set(schema.get("required", []))
+                for param_name, param_info in properties.items():
+                    if isinstance(param_info, dict):
+                        parameters.append(
+                            {
+                                "name": param_name,
+                                "type": param_info.get("type", "string"),
+                                "description": param_info.get("description", ""),
+                                "required": param_name in required,
+                                "default": param_info.get("default"),
+                            }
+                        )
+        except Exception:
+            parameters = []
+
+        infos.append(
+            MCPToolInfo(
+                name=tool.name,
+                description=getattr(tool, "description", ""),
+                parameters=parameters,
+                system_disabled=bool(policy.disabled) if policy else False,
+                user_disabled=False,
+                allowed_roles=list(policy.allowed_roles) if policy else [],
+                role_quotas=dict(policy.role_quotas) if policy else {},
+                policy_configured=policy is not None,
+            )
+        )
+    return infos

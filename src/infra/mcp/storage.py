@@ -5,7 +5,8 @@ Supports both system-level and user-level MCP server configurations.
 """
 
 import copy
-from typing import TYPE_CHECKING, Any, Optional
+import inspect
+from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 from src.infra.logging import get_logger
 from src.infra.mcp.encryption import (
@@ -18,7 +19,9 @@ from src.infra.storage.mongodb import get_mongo_client
 from src.infra.utils.datetime import to_iso, utc_now_iso
 from src.kernel.config import settings
 from src.kernel.schemas.mcp import (
+    MCPRoleQuota,
     MCPServerResponse,
+    MCPToolPolicy,
     MCPTransport,
     SystemMCPServer,
     UserMCPServer,
@@ -54,6 +57,7 @@ class MCPStorage(StorageOperations):
         self._user_collection: Optional["AsyncIOMotorCollection"] = None
         self._preferences_collection: Optional["AsyncIOMotorCollection"] = None
         self._tool_preferences_collection: Optional["AsyncIOMotorCollection"] = None
+        self._tool_policies_collection: Optional["AsyncIOMotorCollection"] = None
 
     async def _invalidate_user_cache(self, user_id: str) -> None:
         """Invalidate MCP tools cache for a specific user"""
@@ -68,6 +72,11 @@ class MCPStorage(StorageOperations):
 
         count = await invalidate_all_global_cache()
         logger.info(f"[MCP Storage] Invalidated all global cache, {count} entries")
+
+    async def _call_optional_async(self, value: Any) -> Any:
+        if inspect.isawaitable(value):
+            return await value
+        return value
 
     def _get_system_collection(self) -> "AsyncIOMotorCollection":
         """Get system MCP servers collection lazily"""
@@ -100,6 +109,14 @@ class MCPStorage(StorageOperations):
             db = self._client[settings.MONGODB_DB]
             self._tool_preferences_collection = db["user_mcp_tool_preferences"]
         return self._tool_preferences_collection
+
+    def _get_tool_policies_collection(self) -> "AsyncIOMotorCollection":
+        """Get admin-managed MCP tool policies collection lazily."""
+        if self._tool_policies_collection is None:
+            self._client = get_mongo_client()
+            db = self._client[settings.MONGODB_DB]
+            self._tool_policies_collection = db["mcp_tool_policies"]
+        return self._tool_policies_collection
 
     # ==========================================
     # System MCP Servers (Admin)
@@ -382,6 +399,7 @@ class MCPStorage(StorageOperations):
 
             # Get user-disabled tools for this server (per-user preference)
             user_disabled_tool_names = await self.get_disabled_tool_names(user_id)
+            tool_policies = await self.list_tool_policies(server_name)
 
             from src.infra.tool.mcp_client import MCPClientManager
 
@@ -410,13 +428,17 @@ class MCPStorage(StorageOperations):
                 # Check if this tool is user-disabled (qualified name: server:tool)
                 qualified = f"{server_name}:{tool_name}"
                 is_user_disabled = qualified in user_disabled_tool_names
+                policy = tool_policies.get(tool_name)
 
                 tool_info: dict[str, Any] = {
                     "name": tool_name,
                     "description": getattr(tool, "description", ""),
                     "parameters": [],
-                    "system_disabled": is_system_disabled,
+                    "system_disabled": bool(policy.disabled) if policy else is_system_disabled,
                     "user_disabled": is_user_disabled,
+                    "allowed_roles": list(policy.allowed_roles) if policy else [],
+                    "role_quotas": policy.role_quotas if policy else {},
+                    "policy_configured": policy is not None,
                 }
                 # Extract parameters if possible
                 try:
@@ -515,6 +537,68 @@ class MCPStorage(StorageOperations):
         """Get set of fully qualified tool names that are disabled by the user."""
         prefs = await self.get_tool_preferences(user_id)
         return {name for name, enabled in prefs.items() if not enabled}
+
+    async def set_tool_policy(
+        self,
+        *,
+        server_name: str,
+        tool_name: str,
+        allowed_roles: list[str] | None = None,
+        role_quotas: Mapping[str, MCPRoleQuota | dict[str, Any]] | None = None,
+        disabled: bool | None = None,
+        updated_by: str | None = None,
+    ) -> MCPToolPolicy:
+        """Create or update an admin-managed policy for one MCP tool."""
+        collection = self._get_tool_policies_collection()
+        existing = await collection.find_one({"server_name": server_name, "tool_name": tool_name})
+        now = utc_now_iso()
+        update_data: dict[str, Any] = {
+            "server_name": server_name,
+            "tool_name": tool_name,
+            "updated_at": now,
+            "updated_by": updated_by,
+        }
+        if not existing:
+            update_data["created_at"] = now
+        if allowed_roles is not None:
+            update_data["allowed_roles"] = allowed_roles
+        if role_quotas is not None:
+            update_data["role_quotas"] = {
+                role_name: quota.model_dump() if hasattr(quota, "model_dump") else quota
+                for role_name, quota in role_quotas.items()
+            }
+        if disabled is not None:
+            update_data["disabled"] = disabled
+
+        await collection.update_one(
+            {"server_name": server_name, "tool_name": tool_name},
+            {"$set": update_data},
+            upsert=True,
+        )
+
+        await self._call_optional_async(self._invalidate_all_cache())
+        policy = await self.get_tool_policy(server_name, tool_name)
+        if policy is None:
+            return MCPToolPolicy(**update_data)
+        return policy
+
+    async def get_tool_policy(self, server_name: str, tool_name: str) -> MCPToolPolicy | None:
+        """Get the explicit policy for one MCP tool, if configured."""
+        collection = self._get_tool_policies_collection()
+        doc = await collection.find_one({"server_name": server_name, "tool_name": tool_name})
+        if not doc:
+            return None
+        return self._doc_to_tool_policy(doc)
+
+    async def list_tool_policies(self, server_name: str) -> dict[str, MCPToolPolicy]:
+        """List explicit tool policies for a server, keyed by tool name."""
+        collection = self._get_tool_policies_collection()
+        policies: dict[str, MCPToolPolicy] = {}
+        async for doc in collection.find({"server_name": server_name}):
+            policy = self._doc_to_tool_policy(doc)
+            if policy.tool_name:
+                policies[policy.tool_name] = policy
+        return policies
 
     async def set_system_tool_disabled(
         self, server_name: str, tool_name: str, disabled: bool
@@ -693,6 +777,27 @@ class MCPStorage(StorageOperations):
             disabled_tools=doc.get("disabled_tools", []),
             created_at=created_at,
             updated_at=updated_at,
+        )
+
+    def _doc_to_tool_policy(self, doc: dict[str, Any]) -> MCPToolPolicy:
+        """Convert MongoDB document to MCPToolPolicy."""
+        created_at = doc.get("created_at")
+        updated_at = doc.get("updated_at")
+
+        if created_at and hasattr(created_at, "isoformat"):
+            created_at = to_iso(created_at)
+        if updated_at and hasattr(updated_at, "isoformat"):
+            updated_at = to_iso(updated_at)
+
+        return MCPToolPolicy(
+            server_name=doc.get("server_name"),
+            tool_name=doc.get("tool_name"),
+            disabled=doc.get("disabled", False),
+            allowed_roles=doc.get("allowed_roles", []),
+            role_quotas=doc.get("role_quotas", {}),
+            created_at=created_at,
+            updated_at=updated_at,
+            updated_by=doc.get("updated_by"),
         )
 
     def _doc_to_response(

@@ -152,3 +152,39 @@ async def test_mcp_tool_wrapper_returns_quota_error_without_calling_original(
     assert calls == ["quota"]
     assert "MCP quota exceeded" in result
     assert "github" in result
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_wrapper_uses_tool_name_for_quota_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infra.mcp.quota import MCPQuotaResult
+    from src.infra.tool.mcp_client import MCPToolWithRetry
+
+    seen: dict[str, str | None] = {}
+
+    async def fake_check_and_consume(*args: Any, **kwargs: Any) -> MCPQuotaResult:
+        seen["server_name"] = kwargs.get("server_name")
+        seen["tool_name"] = kwargs.get("tool_name")
+        return MCPQuotaResult(allowed=True)
+
+    monkeypatch.setattr(
+        "src.infra.mcp.quota.check_and_consume_mcp_quota",
+        fake_check_and_consume,
+    )
+
+    tool = MCPToolWithRetry(
+        _FakeOriginalTool(),
+        user_id="user-1",
+        server_name="github",
+        user_roles=["user"],
+        is_admin=False,
+        role_quotas={"user": MCPRoleQuota(daily_limit=1)},
+    )
+    object.__setattr__(tool, "_quota_tool_name", "image_generate")
+
+    result = await tool._arun(query="hello")
+
+    assert seen["server_name"] == "github"
+    assert seen["tool_name"] == "image_generate"
+    assert result == "called"

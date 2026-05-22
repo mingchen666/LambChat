@@ -29,6 +29,7 @@ import mimetypes
 import os
 import re
 from typing import Annotated, Any, Literal, Optional
+from urllib.parse import unquote, urlparse
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
@@ -226,6 +227,24 @@ def _is_local_path(path: str) -> bool:
     )
 
 
+def _is_remote_url(path: str) -> bool:
+    """判断路径是否为可直接返回的远程 URL"""
+    parsed = urlparse(path.strip())
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _get_filename_from_path(path: str) -> str:
+    """从本地路径或 URL 中提取文件名。"""
+    if _is_remote_url(path):
+        parsed = urlparse(path.strip())
+        candidate = os.path.basename(unquote(parsed.path))
+        if candidate:
+            return candidate
+
+    candidate = os.path.basename(path.rstrip("/"))
+    return candidate or path
+
+
 def _is_uploadable_resource(path: str) -> bool:
     """判断路径是否指向可上传的资源文件"""
     # 去掉 query string / fragment
@@ -364,7 +383,9 @@ async def _resolve_local_references(
 
 @tool
 async def reveal_file(
-    file_path: Annotated[str, "要展示的文件路径（绝对路径或相对于工作目录的路径）"],
+    file_path: Annotated[
+        str, "要展示的文件路径（本地绝对路径、相对路径，或可直接访问的 http(s) URL）"
+    ],
     description: Annotated[
         Optional[str], "对文件内容的简要描述，帮助用户理解为什么要查看这个文件"
     ] = None,
@@ -381,26 +402,45 @@ async def reveal_file(
     前端自动给用户显示可点击的文件。
 
     Args:
-        file_path: 要展示的文件路径（绝对路径或相对于工作目录的路径）
+        file_path: 要展示的文件路径（本地绝对路径、相对路径，或可直接访问的 http(s) URL）
         description: 对文件内容的简要描述，帮助用户理解为什么要查看这个文件（可选）
 
     Returns:
         JSON 格式的结果，包含文件信息
     """
+    if _is_remote_url(file_path):
+        filename = _get_filename_from_path(file_path)
+        mime_type = get_mime_type(filename)
+        file_category = get_file_category(mime_type)
+        remote_result = {
+            "key": file_path,
+            "url": file_path,
+            "name": filename,
+            "type": file_category,
+            "mime_type": mime_type,
+            "size": 0,
+            "_meta": {
+                "path": file_path,
+                "description": description or "",
+                "source": "remote_url",
+            },
+        }
+        return json.dumps(remote_result, ensure_ascii=False)
+
     storage = await _get_storage()
 
     backend = get_backend_from_runtime(runtime)
 
     if backend is None:
         logger.warning("Backend not available from runtime, returning raw path")
-        result: dict[str, Any] = {
+        backend_unavailable_result: dict[str, Any] = {
             "type": "file_reveal",
             "file": {
                 "path": file_path,
                 "description": description or "",
             },
         }
-        return json.dumps(result, ensure_ascii=False)
+        return json.dumps(backend_unavailable_result, ensure_ascii=False)
 
     try:
         file_content = await _download_file_from_backend(backend, file_path)
@@ -418,7 +458,7 @@ async def reveal_file(
 
         if file_content is None:
             logger.error(f"Failed to read file {file_path} from backend")
-            result = {
+            missing_file_result = {
                 "type": "file_reveal",
                 "file": {
                     "path": file_path,
@@ -426,9 +466,9 @@ async def reveal_file(
                     "error": "file_not_found_or_empty",
                 },
             }
-            return json.dumps(result, ensure_ascii=False)
+            return json.dumps(missing_file_result, ensure_ascii=False)
 
-        filename = file_path.split("/")[-1]
+        filename = _get_filename_from_path(file_path)
         mime_type = get_mime_type(filename)
 
         # 对可包含本地资源引用的文件（Markdown、HTML、SVG 等），兜底替换本地路径
@@ -453,7 +493,7 @@ async def reveal_file(
 
         proxy_url = f"{base_url}/api/upload/file/{upload_result.key}"
 
-        result = {
+        reveal_result = {
             "key": upload_result.key,
             "url": proxy_url,
             "name": filename,
@@ -513,11 +553,11 @@ async def reveal_file(
         except Exception as idx_err:
             logger.warning(f"[reveal_file] Failed to index revealed file: {idx_err}")
 
-        return json.dumps(result, ensure_ascii=False)
+        return json.dumps(reveal_result, ensure_ascii=False)
 
     except Exception as e:
         logger.error(f"Error processing file {file_path}: {e}")
-        result = {
+        error_result = {
             "type": "file_reveal",
             "file": {
                 "path": file_path,
@@ -525,7 +565,7 @@ async def reveal_file(
                 "error": str(e),
             },
         }
-        return json.dumps(result, ensure_ascii=False)
+        return json.dumps(error_result, ensure_ascii=False)
 
 
 def get_reveal_file_tool() -> BaseTool:

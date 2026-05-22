@@ -19,6 +19,7 @@ export interface MCPServerBase {
 // MCP Server Response (from API)
 export interface MCPServerResponse extends MCPServerBase {
   is_system: boolean;
+  is_internal?: boolean;
   can_edit: boolean;
   allowed_roles: string[];
   role_quotas: Record<string, MCPRoleQuota>;
@@ -109,6 +110,9 @@ export interface MCPToolInfo {
   parameters: MCPToolParamInfo[];
   system_disabled?: boolean; // Whether this tool is disabled at system level
   user_disabled?: boolean; // Whether this tool is disabled by the user
+  allowed_roles?: string[];
+  role_quotas?: Record<string, MCPRoleQuota>;
+  policy_configured?: boolean;
 }
 
 // MCP Tool Parameter Info
@@ -134,4 +138,21 @@ export interface MCPToolToggleResponse {
   tool_name: string;
   enabled: boolean;
   message: string;
+}
+
+export interface MCPToolPolicy {
+  server_name?: string;
+  tool_name?: string;
+  disabled?: boolean;
+  allowed_roles?: string[];
+  role_quotas?: Record<string, MCPRoleQuota>;
+  created_at?: string;
+  updated_at?: string;
+  updated_by?: string;
+}
+
+export interface MCPToolPolicyUpdate {
+  disabled?: boolean;
+  allowed_roles?: string[];
+  role_quotas?: Record<string, MCPRoleQuota>;
 }

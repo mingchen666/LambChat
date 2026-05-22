@@ -1,10 +1,52 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
 
 from src.infra.tool import reveal_file_tool
+
+
+@pytest.mark.asyncio
+async def test_reveal_file_returns_remote_url_directly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _get_storage():
+        raise AssertionError("remote URL reveal should not initialize storage")
+
+    def _get_backend_from_runtime(runtime):
+        raise AssertionError("remote URL reveal should not inspect backend")
+
+    url = (
+        "https://cdn.example.com/generated-images%2Fuser-1%2Fportrait.png"
+        "?response-content-disposition=inline&Expires=1780067399"
+    )
+
+    monkeypatch.setattr(reveal_file_tool, "_get_storage", _get_storage)
+    monkeypatch.setattr(reveal_file_tool, "get_backend_from_runtime", _get_backend_from_runtime)
+
+    result = json.loads(
+        await reveal_file_tool.reveal_file.coroutine(
+            url,
+            description="AI generated portrait",
+            runtime=object(),
+        )
+    )
+
+    assert result == {
+        "key": url,
+        "url": url,
+        "name": "portrait.png",
+        "type": "image",
+        "mime_type": "image/png",
+        "size": 0,
+        "_meta": {
+            "path": url,
+            "description": "AI generated portrait",
+            "source": "remote_url",
+        },
+    }
 
 
 @pytest.mark.asyncio

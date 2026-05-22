@@ -158,6 +158,8 @@ export type {
   MCPToolParamInfo,
   MCPToolDiscoveryResponse,
   MCPToolToggleResponse,
+  MCPToolPolicy,
+  MCPToolPolicyUpdate,
 } from "./mcp";
 
 // ============================================

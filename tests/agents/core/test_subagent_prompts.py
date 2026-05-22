@@ -187,6 +187,7 @@ def test_workflow_section_keeps_core_operational_guidance() -> None:
         "reveal_file",
         "write_file",
         "returned `url`",
+        "`http(s)` URL",
         "reveal_project",
         "transfer_file",
         "transfer_path",

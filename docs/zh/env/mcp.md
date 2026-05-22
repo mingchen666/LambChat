@@ -41,6 +41,16 @@ Model Context Protocol (MCP) 和工具系统设置。
 | `AUDIO_TRANSCRIPTION_BASE_URL` | _(空)_ | 否 | 转写 API 基础 URL。 |
 | `AUDIO_TRANSCRIPTION_MODEL` | `gpt-4o-mini-transcribe` | 否 | 转写模型名称。 |
 
+## 图像生成
+
+| 变量名 | 默认值 | 敏感 | 说明 |
+|--------|--------|------|------|
+| `ENABLE_IMAGE_GENERATION` | `false` | 否 | 启用图像生成工具。 |
+| `IMAGE_GENERATION_API_KEY` | _(空)_ | 是 | 图像生成 API 密钥。 |
+| `IMAGE_GENERATION_BASE_URL` | `https://api.openai.com/v1` | 否 | OpenAI 兼容图像 API 基础 URL。 |
+| `IMAGE_GENERATION_MODEL` | `gpt-image-2` | 否 | 图像模型名称。 |
+| `IMAGE_GENERATION_TIMEOUT` | `120` | 否 | 请求超时时间（秒）。 |
+
 ## 示例
 
 ```bash
@@ -58,6 +68,11 @@ ENABLE_CODE_INTERPRETER=false
 ENABLE_AUDIO_TRANSCRIPTION=true
 AUDIO_TRANSCRIPTION_API_KEY=sk-your-key
 AUDIO_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
+
+# 图像生成（可选）
+ENABLE_IMAGE_GENERATION=true
+IMAGE_GENERATION_API_KEY=sk-your-key
+IMAGE_GENERATION_MODEL=gpt-image-2
 ```
 
 ::: tip

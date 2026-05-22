@@ -17,7 +17,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from pydantic import PrivateAttr
 
 from src.infra.logging import get_logger
-from src.kernel.schemas.mcp import MCPRoleQuota
+from src.kernel.schemas.mcp import MCPRoleQuota, MCPToolPolicy
 
 logger = get_logger(__name__)
 
@@ -55,6 +55,7 @@ class MCPToolWithRetry(BaseTool):
     _user_roles: list[str] = PrivateAttr(default_factory=list)
     _is_admin: bool = PrivateAttr(default=False)
     _role_quotas: dict[str, MCPRoleQuota] = PrivateAttr(default_factory=dict)
+    _quota_tool_name: str | None = PrivateAttr(default=None)
 
     def __init__(
         self,
@@ -66,6 +67,7 @@ class MCPToolWithRetry(BaseTool):
         user_roles: list[str] | None = None,
         is_admin: bool = False,
         role_quotas: Mapping[str, MCPRoleQuota | dict[str, Any]] | None = None,
+        quota_tool_name: str | None = None,
     ):
         super().__init__(
             name=original_tool.name,
@@ -85,6 +87,7 @@ class MCPToolWithRetry(BaseTool):
             else MCPRoleQuota.model_validate(quota)
             for role_name, quota in (role_quotas or {}).items()
         }
+        self._quota_tool_name = quota_tool_name
         if server_name:
             object.__setattr__(self, "server", server_name)
 
@@ -153,6 +156,7 @@ class MCPToolWithRetry(BaseTool):
             quota_result = await check_and_consume_mcp_quota(
                 user_id=self._user_id,
                 server_name=self._server_name,
+                tool_name=self._quota_tool_name,
                 user_roles=self._user_roles,
                 role_quotas=self._role_quotas,
                 is_admin=self._is_admin,
@@ -245,6 +249,7 @@ class MCPClientManager:
         self._tool_server_map: dict[tuple[str, str], str] = {}
         self._tool_name_server_map: dict[str, str] = {}
         self._server_role_quotas: dict[str, dict[str, MCPRoleQuota]] = {}
+        self._server_tool_policies: dict[str, dict[str, MCPToolPolicy]] = {}
         self._user_roles: list[str] = []
         self._is_admin = False
         self._initialized = False
@@ -403,6 +408,7 @@ class MCPClientManager:
         # Use dict[str, Any] to allow flexible key-value pairs for different transport types
         server_configs: dict[str, dict[str, Any]] = {}
         self._server_role_quotas.clear()
+        self._server_tool_policies.clear()
         for server_name, server_config in mcp_servers.items():
             transport = server_config.get("transport", "streamable_http")
             role_quotas = server_config.get("role_quotas") or {}
@@ -411,6 +417,13 @@ class MCPClientManager:
                 if isinstance(quota, MCPRoleQuota)
                 else MCPRoleQuota.model_validate(quota)
                 for role_name, quota in role_quotas.items()
+            }
+            tool_policies = server_config.get("tool_policies") or {}
+            self._server_tool_policies[server_name] = {
+                tool_name: policy
+                if isinstance(policy, MCPToolPolicy)
+                else MCPToolPolicy.model_validate(policy)
+                for tool_name, policy in tool_policies.items()
             }
 
             if transport in ("sse", "streamable_http"):
@@ -570,6 +583,12 @@ class MCPClientManager:
         wrapped_tools: list[BaseTool] = []
         for tool in filtered_tools:
             server_name = self._server_for_tool(tool)
+            raw_tool_name = getattr(tool, "name", "")
+            if server_name and raw_tool_name.startswith(f"{server_name}:"):
+                raw_tool_name = raw_tool_name[len(server_name) + 1 :]
+            policy = self._server_tool_policies.get(server_name or "", {}).get(raw_tool_name)
+            if policy and (policy.disabled or not self._is_tool_allowed(policy.allowed_roles)):
+                continue
             wrapped_tools.append(
                 MCPToolWithRetry(
                     tool,
@@ -577,10 +596,22 @@ class MCPClientManager:
                     server_name=server_name,
                     user_roles=self._user_roles,
                     is_admin=self._is_admin,
-                    role_quotas=self._server_role_quotas.get(server_name or "", {}),
+                    role_quotas=(
+                        policy.role_quotas
+                        if policy
+                        else self._server_role_quotas.get(server_name or "", {})
+                    ),
+                    quota_tool_name=raw_tool_name if policy else None,
                 )
             )
         return wrapped_tools
+
+    def _is_tool_allowed(self, allowed_roles: list[str] | None) -> bool:
+        if self._is_admin:
+            return True
+        if not allowed_roles:
+            return True
+        return bool(set(self._user_roles).intersection(allowed_roles))
 
     def _is_mcp_retryable_error(self, error: Exception) -> bool:
         """判断 MCP 错误是否可重试"""
@@ -633,6 +664,7 @@ class MCPClientManager:
         self._tool_server_map.clear()
         self._tool_name_server_map.clear()
         self._server_role_quotas.clear()
+        self._server_tool_policies.clear()
         self._initialized = False
 
 

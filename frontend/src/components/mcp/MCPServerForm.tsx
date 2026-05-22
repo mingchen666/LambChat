@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Permission } from "../../types";
 import { uuid } from "../../utils/uuid";
@@ -11,12 +11,14 @@ import type {
 } from "../../types";
 import { GlassSelect } from "../common/GlassSelect";
 import { EnvKeysSelector } from "./EnvKeysSelector";
+import { MCPToolPolicyEditor } from "./MCPToolPolicyEditor";
 import { RoleSelector } from "./RoleSelector";
 
 interface MCPServerFormProps {
   server?: MCPServerResponse | null;
   onSave: (data: MCPServerCreate) => Promise<boolean>;
   onCancel: () => void;
+  onToolPoliciesChanged?: () => void;
   isLoading?: boolean;
   allowedTransports?: Permission[];
   isSystemServer?: boolean;
@@ -74,6 +76,7 @@ export function MCPServerForm({
   server,
   onSave,
   onCancel,
+  onToolPoliciesChanged,
   isLoading = false,
   allowedTransports = [
     Permission.MCP_ADMIN,
@@ -281,7 +284,7 @@ export function MCPServerForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-5">
       {/* Name */}
       <div className="es-field">
         <label className="es-label">{t("mcp.form.serverName")}</label>
@@ -291,12 +294,12 @@ export function MCPServerForm({
           onChange={(e) => setName(e.target.value)}
           disabled={isEditing}
           placeholder={t("mcp.form.serverNamePlaceholder")}
-          className={`glass-input es-input ${
+          className={`glass-input es-input transition-colors ${
             errors.name ? "!border-red-300 dark:!border-red-700" : ""
           }`}
         />
         {errors.name && (
-          <p className="es-hint" style={{ color: "#dc2626" }}>
+          <p className="es-hint !text-red-500 dark:!text-red-400">
             {errors.name}
           </p>
         )}
@@ -323,7 +326,7 @@ export function MCPServerForm({
       </div>
 
       {/* Enabled */}
-      <label className="group flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-[var(--theme-primary-light)]/40">
+      <label className="group flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors hover:bg-[var(--theme-primary-light)]/30">
         <input
           type="checkbox"
           id="enabled"
@@ -331,7 +334,7 @@ export function MCPServerForm({
           onChange={(e) => setEnabled(e.target.checked)}
           className="sr-only peer"
         />
-        <div className="h-[18px] w-[18px] rounded-[5px] border-2 border-[var(--theme-border)] flex items-center justify-center transition-all peer-checked:bg-amber-500 peer-checked:border-amber-500">
+        <div className="h-[18px] w-[18px] rounded-md border-2 border-[var(--theme-border)] flex items-center justify-center transition-all peer-checked:bg-emerald-500 peer-checked:border-emerald-500 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/30">
           {enabled && (
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -368,8 +371,8 @@ export function MCPServerForm({
                   weekly_limit: "",
                 };
                 return (
-                  <div key={role} className="es-section">
-                    <div className="text-xs font-medium text-[var(--theme-text-secondary)]">
+                  <div key={role} className="es-section !gap-2">
+                    <div className="text-xs font-semibold text-[var(--theme-text)]">
                       {role}
                     </div>
                     <div className="es-row es-row-2">
@@ -385,7 +388,7 @@ export function MCPServerForm({
                             updateRoleQuota(role, "daily_limit", e.target.value)
                           }
                           placeholder={t("mcp.form.unlimited")}
-                          className="glass-input es-input px-3"
+                          className="glass-input es-input px-3 tabular-nums"
                         />
                       </div>
                       <div className="es-field">
@@ -404,7 +407,7 @@ export function MCPServerForm({
                             )
                           }
                           placeholder={t("mcp.form.unlimited")}
-                          className="glass-input es-input px-3"
+                          className="glass-input es-input px-3 tabular-nums"
                         />
                       </div>
                     </div>
@@ -415,6 +418,17 @@ export function MCPServerForm({
           )}
         </div>
       )}
+
+      {isSystemServer && isEditing && <div className="es-divider" />}
+
+      {isSystemServer && isEditing && (
+        <MCPToolPolicyEditor
+          serverName={server?.name ?? name}
+          onChanged={onToolPoliciesChanged}
+        />
+      )}
+
+      {isSystemServer && isEditing && <div className="es-divider" />}
 
       {/* ── Sandbox-specific fields ── */}
       {isSandbox && (
@@ -427,12 +441,12 @@ export function MCPServerForm({
               value={command}
               onChange={(e) => setCommand(e.target.value)}
               placeholder={t("mcp.form.commandPlaceholder")}
-              className={`glass-input es-input font-mono ${
+              className={`glass-input es-input font-mono transition-colors ${
                 errors.command ? "!border-red-300 dark:!border-red-700" : ""
               }`}
             />
             {errors.command && (
-              <p className="es-hint" style={{ color: "#dc2626" }}>
+              <p className="es-hint !text-red-500 dark:!text-red-400">
                 {errors.command}
               </p>
             )}
@@ -458,12 +472,12 @@ export function MCPServerForm({
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder={t("mcp.form.urlPlaceholder")}
-              className={`glass-input es-input font-mono ${
+              className={`glass-input es-input font-mono transition-colors ${
                 errors.url ? "!border-red-300 dark:!border-red-700" : ""
               }`}
             />
             {errors.url && (
-              <p className="es-hint" style={{ color: "#dc2626" }}>
+              <p className="es-hint !text-red-500 dark:!text-red-400">
                 {errors.url}
               </p>
             )}
@@ -476,7 +490,7 @@ export function MCPServerForm({
               <button
                 type="button"
                 onClick={addHeader}
-                className="btn-secondary text-xs px-2 py-1"
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-700 dark:text-stone-400 dark:hover:bg-stone-700 dark:hover:text-stone-200 transition-colors"
               >
                 <Plus size={12} />
                 {t("mcp.form.add")}
@@ -484,7 +498,7 @@ export function MCPServerForm({
             </div>
             <div className="space-y-2 mt-1">
               {headers.map((header) => (
-                <div key={header.id} className="flex gap-2">
+                <div key={header.id} className="flex gap-1.5">
                   <input
                     type="text"
                     value={header.key}
@@ -506,9 +520,9 @@ export function MCPServerForm({
                   <button
                     type="button"
                     onClick={() => removeHeader(header.id)}
-                    className="btn-icon hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+                    className="btn-icon rounded-lg flex-shrink-0 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 dark:hover:text-red-400 transition-colors"
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={14} />
                   </button>
                 </div>
               ))}
@@ -521,7 +535,8 @@ export function MCPServerForm({
       )}
 
       {/* Actions */}
-      <div className="flex justify-end gap-2 pt-2">
+      <div className="es-divider" />
+      <div className="flex justify-end gap-2">
         <button
           type="button"
           onClick={onCancel}
@@ -533,9 +548,18 @@ export function MCPServerForm({
         <button
           type="submit"
           disabled={isLoading}
-          className="btn-primary disabled:opacity-50"
+          className="btn-primary disabled:opacity-50 min-w-[80px]"
         >
-          {isEditing ? t("mcp.form.saveChanges") : t("mcp.form.createServer")}
+          {isLoading ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Loader2 size={14} className="animate-spin" />
+              ...
+            </span>
+          ) : isEditing ? (
+            t("mcp.form.saveChanges")
+          ) : (
+            t("mcp.form.createServer")
+          )}
         </button>
       </div>
     </form>

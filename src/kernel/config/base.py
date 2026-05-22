@@ -290,6 +290,13 @@ class Settings(BaseSettings):
     AUDIO_TRANSCRIPTION_BASE_URL: str = ""
     AUDIO_TRANSCRIPTION_MODEL: str = "gpt-4o-mini-transcribe"
 
+    # Image generation tool settings
+    ENABLE_IMAGE_GENERATION: bool = False
+    IMAGE_GENERATION_API_KEY: str = ""
+    IMAGE_GENERATION_BASE_URL: str = "https://api.openai.com/v1"
+    IMAGE_GENERATION_MODEL: str = "gpt-image-2"
+    IMAGE_GENERATION_TIMEOUT: int = 120
+
     model_config = {
         "env_file": str(PROJECT_ROOT / ".env"),
         "env_file_encoding": "utf-8",

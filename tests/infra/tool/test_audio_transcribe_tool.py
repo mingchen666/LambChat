@@ -175,6 +175,7 @@ async def test_search_agent_context_includes_audio_transcribe_tool(
         "src/agents/search_agent/context.py",
     )
 
+    monkeypatch.setattr(search_context.settings, "ENABLE_AUDIO_TRANSCRIPTION", True)
     monkeypatch.setattr(search_context.settings, "ENABLE_MEMORY", False)
     monkeypatch.setattr(search_context.settings, "ENABLE_SANDBOX", False)
     monkeypatch.setattr(search_context.settings, "ENABLE_SKILLS", False)
@@ -196,6 +197,7 @@ async def test_fast_agent_context_includes_audio_transcribe_tool(
         "src/agents/fast_agent/context.py",
     )
 
+    monkeypatch.setattr(fast_context.settings, "ENABLE_AUDIO_TRANSCRIPTION", True)
     monkeypatch.setattr(fast_context.settings, "ENABLE_MEMORY", False)
     monkeypatch.setattr(fast_context.settings, "ENABLE_SANDBOX", False)
     monkeypatch.setattr(fast_context.settings, "ENABLE_SKILLS", False)

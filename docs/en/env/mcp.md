@@ -41,6 +41,16 @@ For MCP servers with many tools, deferred loading reduces prompt size by loading
 | `AUDIO_TRANSCRIPTION_BASE_URL` | _(empty)_ | No | Transcription API base URL. |
 | `AUDIO_TRANSCRIPTION_MODEL` | `gpt-4o-mini-transcribe` | No | Transcription model name. |
 
+## Image Generation
+
+| Variable | Default | Sensitive | Description |
+|----------|---------|-----------|-------------|
+| `ENABLE_IMAGE_GENERATION` | `false` | No | Enable the image generation tool. |
+| `IMAGE_GENERATION_API_KEY` | _(empty)_ | Yes | Image generation API key. |
+| `IMAGE_GENERATION_BASE_URL` | `https://api.openai.com/v1` | No | OpenAI-compatible image API base URL. |
+| `IMAGE_GENERATION_MODEL` | `gpt-image-2` | No | Image model name. |
+| `IMAGE_GENERATION_TIMEOUT` | `120` | No | Request timeout in seconds. |
+
 ## Example
 
 ```bash
@@ -58,6 +68,11 @@ ENABLE_CODE_INTERPRETER=false
 ENABLE_AUDIO_TRANSCRIPTION=true
 AUDIO_TRANSCRIPTION_API_KEY=sk-your-key
 AUDIO_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
+
+# Image Generation (optional)
+ENABLE_IMAGE_GENERATION=true
+IMAGE_GENERATION_API_KEY=sk-your-key
+IMAGE_GENERATION_MODEL=gpt-image-2
 ```
 
 ::: tip

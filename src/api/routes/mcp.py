@@ -22,6 +22,8 @@ from src.kernel.schemas.mcp import (
     MCPServerUpdate,
     MCPToolDiscoveryResponse,
     MCPToolInfo,
+    MCPToolPolicy,
+    MCPToolPolicyUpdate,
     MCPToolToggleRequest,
     MCPToolToggleResponse,
 )
@@ -61,6 +63,12 @@ def _paginate_servers(
 def _is_admin(user: TokenPayload) -> bool:
     """Check if user has admin permissions"""
     return "mcp:admin" in (user.permissions or [])
+
+
+def _is_internal_server(name: str) -> bool:
+    from src.infra.tool.internal_registry import INTERNAL_MCP_SERVER_NAME
+
+    return name == INTERNAL_MCP_SERVER_NAME
 
 
 def _has_permission_for_transport(user: TokenPayload, transport: str) -> bool:
@@ -107,6 +115,10 @@ async def list_servers(
         is_admin=_is_admin(user),
         user_roles=user.roles,
     )
+    if _is_admin(user):
+        from src.infra.tool.internal_registry import build_internal_server_response
+
+        servers.append(build_internal_server_response())
     return _paginate_servers(servers, skip=skip, limit=limit, q=q)
 
 
@@ -207,6 +219,13 @@ async def get_server(
     storage: MCPStorage = Depends(get_mcp_storage),
 ):
     """Get a specific MCP server"""
+    if _is_internal_server(name):
+        if not _is_admin(user):
+            raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
+        from src.infra.tool.internal_registry import build_internal_server_response
+
+        return build_internal_server_response()
+
     # Try user server first
     server = await storage.get_user_server(name, user.sub)
     if server:
@@ -346,12 +365,29 @@ async def discover_server_tools(
     Connects to the server and lists its available tools with descriptions and parameters.
     This endpoint does NOT use cache - it always probes the server directly.
     """
-    tools, error = await storage.discover_server_tools(
-        name,
-        user.sub,
-        user_roles=user.roles,
-        is_admin=_is_admin(user),
-    )
+    if _is_internal_server(name):
+        if not _is_admin(user):
+            raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
+        from src.infra.tool.internal_registry import get_internal_tool_infos
+
+        internal_tools = await get_internal_tool_infos(
+            user_id=user.sub,
+            user_roles=user.roles,
+            is_admin=True,
+        )
+        return MCPToolDiscoveryResponse(
+            server_name=name,
+            tools=internal_tools,
+            count=len(internal_tools),
+            error=None,
+        )
+    else:
+        tools, error = await storage.discover_server_tools(
+            name,
+            user.sub,
+            user_roles=user.roles,
+            is_admin=_is_admin(user),
+        )
 
     return MCPToolDiscoveryResponse(
         server_name=name,
@@ -378,18 +414,35 @@ async def toggle_tool(
     - level=user: Per-user preference. Works for any server the user can see.
       Sets user_disabled — tool hidden from chat input but visible in preferences (re-enableable).
     """
-    if not await storage.can_access_server(
-        name,
-        user.sub,
-        user_roles=user.roles,
-        is_admin=_is_admin(user),
-    ):
-        raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
+    if _is_internal_server(name):
+        if not _is_admin(user):
+            raise HTTPException(status_code=403, detail="Admin permission required")
+        await storage.set_tool_policy(
+            server_name=name,
+            tool_name=tool_name,
+            disabled=not data.enabled,
+            updated_by=user.sub,
+        )
+    elif data.level == "user":
+        if not await storage.can_access_server(
+            name,
+            user.sub,
+            user_roles=user.roles,
+            is_admin=_is_admin(user),
+        ):
+            raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
 
-    if data.level == "user":
         # User-level preference: works for any server
         await storage.set_tool_preference(tool_name, name, user.sub, data.enabled)
     else:
+        if not await storage.can_access_server(
+            name,
+            user.sub,
+            user_roles=user.roles,
+            is_admin=_is_admin(user),
+        ):
+            raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
+
         # System-level: only creators can toggle
         user_server = await storage.get_user_server(name, user.sub)
         if user_server:
@@ -431,6 +484,9 @@ async def admin_list_servers(
 ):
     """Get all MCP servers (admin view - includes all system servers, bypasses role filter)"""
     servers = await storage.get_visible_servers(user.sub, is_admin=True, user_roles=user.roles)
+    from src.infra.tool.internal_registry import build_internal_server_response
+
+    servers.append(build_internal_server_response())
     return _paginate_servers(servers, skip=skip, limit=limit, q=q)
 
 
@@ -473,6 +529,42 @@ async def admin_export_servers(
     return MCPExportResponse(servers=config.get("mcpServers", {}))
 
 
+@admin_router.get("/{name}/tools", response_model=MCPToolDiscoveryResponse)
+async def admin_discover_server_tools(
+    name: str,
+    user: TokenPayload = Depends(require_permissions("mcp:admin")),
+    storage: MCPStorage = Depends(get_mcp_storage),
+):
+    """Discover tools for a system or internal MCP server (admin only)."""
+    if _is_internal_server(name):
+        from src.infra.tool.internal_registry import get_internal_tool_infos
+
+        internal_tools = await get_internal_tool_infos(
+            user_id=user.sub,
+            user_roles=user.roles,
+            is_admin=True,
+        )
+        return MCPToolDiscoveryResponse(
+            server_name=name,
+            tools=internal_tools,
+            count=len(internal_tools),
+            error=None,
+        )
+
+    tools, error = await storage.discover_server_tools(
+        name,
+        user.sub,
+        user_roles=user.roles,
+        is_admin=True,
+    )
+    return MCPToolDiscoveryResponse(
+        server_name=name,
+        tools=[MCPToolInfo(**t) for t in tools],
+        count=len(tools),
+        error=error,
+    )
+
+
 # ==========================================
 # Admin API Endpoints - Dynamic routes (with path parameters)
 # MUST come after static routes to avoid route shadowing
@@ -486,6 +578,11 @@ async def admin_get_server(
     storage: MCPStorage = Depends(get_mcp_storage),
 ):
     """Get a system MCP server (admin only)"""
+    if _is_internal_server(name):
+        from src.infra.tool.internal_registry import build_internal_server_response
+
+        return build_internal_server_response()
+
     server = await storage.get_system_server(name)
     if not server:
         raise HTTPException(status_code=404, detail=f"System server '{name}' not found")
@@ -583,7 +680,15 @@ async def admin_toggle_tool(
     This affects all users globally. When disabled=True, the tool is blocked
     for everyone and cannot be re-enabled by individual users.
     """
-    await storage.set_system_tool_disabled(name, tool_name, not data.enabled)
+    if _is_internal_server(name):
+        await storage.set_tool_policy(
+            server_name=name,
+            tool_name=tool_name,
+            disabled=not data.enabled,
+            updated_by=user.sub,
+        )
+    else:
+        await storage.set_system_tool_disabled(name, tool_name, not data.enabled)
 
     status_text = "enabled" if data.enabled else "disabled"
     return MCPToolToggleResponse(
@@ -591,6 +696,30 @@ async def admin_toggle_tool(
         tool_name=tool_name,
         enabled=data.enabled,
         message=f"Tool '{tool_name}' from server '{name}' has been {status_text} globally",
+    )
+
+
+@admin_router.put("/{name}/tools/{tool_name}/policy", response_model=MCPToolPolicy)
+async def admin_update_tool_policy(
+    name: str,
+    tool_name: str,
+    data: MCPToolPolicyUpdate,
+    user: TokenPayload = Depends(require_permissions("mcp:admin")),
+    storage: MCPStorage = Depends(get_mcp_storage),
+):
+    """Update role access and quotas for one MCP tool (admin only)."""
+    if not _is_internal_server(name):
+        server = await storage.get_system_server(name)
+        if not server:
+            raise HTTPException(status_code=404, detail=f"System server '{name}' not found")
+
+    return await storage.set_tool_policy(
+        server_name=name,
+        tool_name=tool_name,
+        disabled=data.disabled,
+        allowed_roles=data.allowed_roles,
+        role_quotas=data.role_quotas,
+        updated_by=user.sub,
     )
 
 

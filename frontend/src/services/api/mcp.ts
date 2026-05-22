@@ -13,6 +13,8 @@ import type {
   MCPExportResponse,
   MCPToolDiscoveryResponse,
   MCPToolToggleResponse,
+  MCPToolPolicy,
+  MCPToolPolicyUpdate,
 } from "../../types";
 import { API_BASE } from "./config";
 import { authFetch } from "./fetch";
@@ -151,6 +153,44 @@ export const mcpApi = {
       {
         method: "PATCH",
         body: JSON.stringify({ enabled, level }),
+      },
+    );
+  },
+
+  /**
+   * Toggle a specific tool globally (admin only)
+   */
+  async toggleSystemTool(
+    serverName: string,
+    toolName: string,
+    enabled: boolean,
+  ): Promise<MCPToolToggleResponse> {
+    return authFetch<MCPToolToggleResponse>(
+      `${API_BASE}/api/admin/mcp/${encodeURIComponent(
+        serverName,
+      )}/tools/${encodeURIComponent(toolName)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ enabled, level: "system" }),
+      },
+    );
+  },
+
+  /**
+   * Update a specific tool policy
+   */
+  async updateToolPolicy(
+    serverName: string,
+    toolName: string,
+    data: MCPToolPolicyUpdate,
+  ): Promise<MCPToolPolicy> {
+    return authFetch<MCPToolPolicy>(
+      `${API_BASE}/api/admin/mcp/${encodeURIComponent(
+        serverName,
+      )}/tools/${encodeURIComponent(toolName)}/policy`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
       },
     );
   },

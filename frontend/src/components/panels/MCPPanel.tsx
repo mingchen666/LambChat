@@ -435,15 +435,20 @@ export function MCPPanel() {
       {/* Servers List */}
       <div className="flex-1 overflow-y-auto py-2 sm:py-4 px-4">
         {filteredServers.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center text-theme-text-secondary">
-            <FolderOpen size={48} className="mb-3 text-theme-text-secondary" />
-            <p className="text-center">
+          <div className="flex h-full flex-col items-center justify-center text-theme-text-secondary py-12">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-stone-100 dark:bg-stone-800 mb-4">
+              <FolderOpen
+                size={28}
+                className="text-stone-400 dark:text-stone-500"
+              />
+            </div>
+            <p className="text-center text-sm">
               {searchQuery ? t("mcp.noMatchingServers") : t("mcp.noServers")}
             </p>
             {!searchQuery && canWrite && (
               <button
                 onClick={handleCreate}
-                className="mt-3 text-sm text-theme-text-secondary hover:text-theme-text"
+                className="mt-3 text-sm font-medium text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] transition-colors"
               >
                 {t("mcp.addFirst")}
               </button>
@@ -492,39 +497,69 @@ export function MCPPanel() {
         <div className="es-form" style={{ gap: 0 }}>
           {/* Admin option for creating system server */}
           {isCreating && canAdmin && (
-            <div className="es-section mb-4">
-              <label
-                className="flex items-center gap-2.5 text-sm cursor-pointer"
-                style={{ color: "var(--theme-text)" }}
-              >
-                <input
-                  type="checkbox"
-                  id="createAsSystem"
-                  checked={createAsSystem}
-                  onChange={(e) => setCreateAsSystem(e.target.checked)}
-                />
+            <label className="group flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 mb-4 transition-colors hover:bg-[var(--theme-primary-light)]/30">
+              <input
+                type="checkbox"
+                id="createAsSystem"
+                checked={createAsSystem}
+                onChange={(e) => setCreateAsSystem(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="h-[18px] w-[18px] rounded-md border-2 border-[var(--theme-border)] flex items-center justify-center transition-all peer-checked:bg-amber-500 peer-checked:border-amber-500 peer-focus-visible:ring-2 peer-focus-visible:ring-amber-500/30">
+                {createAsSystem && (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </div>
+              <span className="text-sm font-medium text-[var(--theme-text)]">
                 {t("mcp.createAsSystem")}
-              </label>
-            </div>
+              </span>
+            </label>
           )}
           {/* Admin option for changing server type when editing */}
           {!isCreating && editingServer && canAdmin && (
-            <div className="es-section mb-4">
-              <label
-                className="flex items-center gap-2.5 text-sm cursor-pointer"
-                style={{ color: "var(--theme-text)" }}
-              >
-                <input
-                  type="checkbox"
-                  id="changeToSystem"
-                  checked={changeToSystem}
-                  onChange={(e) => setChangeToSystem(e.target.checked)}
-                />
+            <label className="group flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 mb-4 transition-colors hover:bg-[var(--theme-primary-light)]/30">
+              <input
+                type="checkbox"
+                id="changeToSystem"
+                checked={changeToSystem}
+                onChange={(e) => setChangeToSystem(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="h-[18px] w-[18px] rounded-md border-2 border-[var(--theme-border)] flex items-center justify-center transition-all peer-checked:bg-amber-500 peer-checked:border-amber-500 peer-focus-visible:ring-2 peer-focus-visible:ring-amber-500/30">
+                {changeToSystem && (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </div>
+              <span className="text-sm font-medium text-[var(--theme-text)]">
                 {changeToSystem
                   ? t("mcp.systemServerVisible")
                   : t("mcp.userServerVisible")}
-              </label>
-            </div>
+              </span>
+            </label>
           )}
           <MCPServerForm
             server={editingServer}
@@ -533,6 +568,7 @@ export function MCPPanel() {
             isLoading={isLoading}
             allowedTransports={allowedTransports}
             isSystemServer={formIsSystemServer}
+            onToolPoliciesChanged={handleToolToggled}
           />
         </div>
       </EditorSidebar>
@@ -592,23 +628,41 @@ export function MCPPanel() {
           </div>
 
           <div className="es-field">
-            <label className="flex items-center gap-2 es-label">
+            <label className="group flex cursor-pointer items-center gap-2.5 es-label rounded-lg px-1 py-1 transition-colors hover:bg-[var(--theme-primary-light)]/30">
               <input
                 type="checkbox"
                 id="overwrite"
                 checked={importOverwrite}
                 onChange={(e) => setImportOverwrite(e.target.checked)}
+                className="sr-only peer"
               />
+              <div className="h-[18px] w-[18px] rounded-md border-2 border-[var(--theme-border)] flex items-center justify-center transition-all peer-checked:bg-amber-500 peer-checked:border-amber-500 peer-focus-visible:ring-2 peer-focus-visible:ring-amber-500/30">
+                {importOverwrite && (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </div>
               {t("mcp.overwriteExisting")}
             </label>
           </div>
 
           {importResult && (
             <div
-              className={`flex items-center gap-2 rounded-xl p-3 ${
+              className={`flex items-center gap-2.5 rounded-lg border p-3 ${
                 importResult.success
-                  ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                  : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/20 dark:border-emerald-800/40 dark:text-emerald-400"
+                  : "bg-red-50 border-red-200 text-red-700 dark:bg-red-950/20 dark:border-red-800/40 dark:text-red-400"
               }`}
             >
               {importResult.success ? (

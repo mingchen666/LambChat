@@ -145,13 +145,15 @@ class MCPUsageLimiter:
         user_id: str,
         server_name: str,
         quota: MCPRoleQuota,
+        tool_name: str | None = None,
     ) -> MCPQuotaResult:
         if quota.daily_limit is None and quota.weekly_limit is None:
             return MCPQuotaResult(allowed=True)
 
         day_id, daily_ttl, week_id, weekly_ttl = _window_info()
         user_key = _safe_key_part(user_id)
-        server_key = _safe_key_part(server_name)
+        quota_scope = f"{server_name}:{tool_name}" if tool_name else server_name
+        server_key = _safe_key_part(quota_scope)
         daily_key = f"mcp:usage:{user_key}:{server_key}:daily:{day_id}"
         weekly_key = f"mcp:usage:{user_key}:{server_key}:weekly:{week_id}"
 
@@ -183,6 +185,7 @@ async def check_and_consume_mcp_quota(
     *,
     user_id: str | None,
     server_name: str | None,
+    tool_name: str | None = None,
     user_roles: list[str] | None,
     role_quotas: Mapping[str, MCPRoleQuota | dict[str, Any]] | None,
     is_admin: bool = False,
@@ -199,6 +202,7 @@ async def check_and_consume_mcp_quota(
         return await MCPUsageLimiter().check_and_consume(
             user_id=user_id,
             server_name=server_name,
+            tool_name=tool_name,
             quota=quota,
         )
     except Exception as exc:

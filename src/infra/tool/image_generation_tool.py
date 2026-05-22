@@ -15,7 +15,10 @@ from langchain_core.tools import BaseTool, InjectedToolArg
 
 from src.infra.logging import get_logger
 from src.infra.storage.s3.service import get_or_init_storage
-from src.infra.tool.backend_utils import get_base_url_from_runtime, get_user_id_from_runtime
+from src.infra.tool.backend_utils import (
+    get_base_url_from_runtime,
+    get_user_id_from_runtime,
+)
 from src.kernel.config import settings
 
 try:
@@ -167,13 +170,21 @@ async def _convert_result_item(
         filename=filename,
         content_type=mime,
     )
-    return {
-        "url": uploaded["url"],
+    base_url = get_base_url_from_runtime(runtime)
+    proxy_url = (
+        f"{base_url}/api/upload/file/{uploaded['key']}"
+        if base_url
+        else f"/api/upload/file/{uploaded['key']}"
+    )
+    result: dict[str, Any] = {
+        "url": proxy_url,
         "key": uploaded["key"],
         "size": uploaded["size"],
         "content_type": uploaded["content_type"],
-        "revised_prompt": payload.get("revised_prompt"),
     }
+    if payload.get("revised_prompt"):
+        result["revised_prompt"] = payload.get("revised_prompt")
+    return result
 
 
 async def _call_generation_api(
@@ -224,7 +235,10 @@ async def _call_generation_api(
             items = [raw_items]
 
     if not items:
-        return {"error": "Image API did not return any image data", "raw_response": body}
+        return {
+            "error": "Image API did not return any image data",
+            "raw_response": body,
+        }
 
     images = []
     for item in items:
@@ -232,9 +246,6 @@ async def _call_generation_api(
 
     return {
         "success": True,
-        "provider": "openai-compatible",
-        "mode": "generate",
-        "model": model,
         "images": images,
     }
 

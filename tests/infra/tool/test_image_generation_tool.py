@@ -104,7 +104,8 @@ async def test_image_generate_calls_images_api_and_uploads_base64_result(
                 "content_type": content_type,
             }
             return SimpleNamespace(
-                key=f"{folder}/{filename}", url="https://cdn.example.com/cat.png"
+                key=f"{folder}/{filename}",
+                url="https://oss.example.com/generated-images%2Fuser-1%2Fcat.png?Signature=secret",
             )
 
     async def fake_get_or_init_storage():
@@ -135,7 +136,13 @@ async def test_image_generate_calls_images_api_and_uploads_base64_result(
     )
 
     assert result["success"] is True
-    assert result["images"][0]["url"] == "https://cdn.example.com/cat.png"
+    assert set(result.keys()) == {"success", "images"}
+    assert result["images"][0] == {
+        "url": "https://app.example.com/api/upload/file/generated-images/user-1/a cat.png",
+        "key": "generated-images/user-1/a cat.png",
+        "content_type": "image/png",
+        "revised_prompt": "a cat",
+    }
     assert result["images"][0]["revised_prompt"] == "a cat"
     assert captured["request_url"] == "https://api.example.com/v1/images/generations"
     assert captured["kwargs"]["headers"]["Authorization"] == "Bearer sk-test"
